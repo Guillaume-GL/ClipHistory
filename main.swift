@@ -132,7 +132,11 @@ final class History {
     func capture(_ pb: NSPasteboard) -> Bool {
         guard let pbItems = pb.pasteboardItems, !pbItems.isEmpty else { return false }
         let allTypes = Set(pbItems.flatMap { $0.types.map { $0.rawValue } })
-        guard allTypes.isDisjoint(with: ignoredTypes) else { return false }
+        // Les anciens noms (ex. "Pasteboard generator type") n'apparaissent que dans pb.types,
+        // pas dans les types des éléments (qui exposent un "dyn.…" généré) : on vérifie les deux listes.
+        let declaredTypes = Set((pb.types ?? []).map { $0.rawValue })
+        guard allTypes.isDisjoint(with: ignoredTypes),
+              declaredTypes.isDisjoint(with: ignoredTypes) else { return false }
 
         // Lecture format par format : on abandonne dès que le budget est dépassé,
         // sans lire les formats suivants.
