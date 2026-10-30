@@ -121,7 +121,13 @@ first_locked_dir() {
 for target in "$DEST/$APP" "$DEST/.$APP.new" "$DEST/.$APP.old" "$OLD_DEST/$APP"; do
   locked="$(first_locked_dir "$target")"
   if [ -n "$locked" ]; then
-    echo "Impossible de remplacer $target : $locked n'est pas modifiable (installé avec sudo ?)." >&2
+    # L'ancienne copie de ~/Applications est supprimée, pas remplacée : le message le dit.
+    # Ex. ~/Applications/ClipHistory.app verrouillée → « Impossible de supprimer l'ancienne copie … ».
+    if [ "$target" = "$OLD_DEST/$APP" ]; then
+      echo "Impossible de supprimer l'ancienne copie $target : $locked n'est pas modifiable (installé avec sudo ?)." >&2
+    else
+      echo "Impossible de remplacer $target : $locked n'est pas modifiable (installé avec sudo ?)." >&2
+    fi
     echo "Rien n'a été modifié, l'app n'a pas été arrêtée. Pour corriger :" >&2
     echo "  sudo chown -R \"\$(id -un)\" \"$target\"" >&2
     exit 1

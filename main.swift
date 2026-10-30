@@ -1195,7 +1195,16 @@ func makeMenuBarIcon() -> NSImage {
 // Compilé avec -D MAKE_ICON (par build.sh) : écrit les PNG de l'icône dans le dossier passé en argument.
 // Compilé avec -D TESTING (bash build.sh test) : lance les tests de Tests.swift au lieu de l'app.
 #if MAKE_ICON
-writeAppIconSet(to: CommandLine.arguments[1])
+// Exactement un argument : le dossier de sortie. Sans ce contrôle, « ./MakeAppIcon » sans argument
+// plantait (index hors limites, code 133) au lieu d'expliquer quoi passer.
+//   ./MakeAppIcon build/AppIcon.iconset  → écrit les PNG, code 0
+//   ./MakeAppIcon                        → usage sur stderr, code 1
+let iconToolArguments = CommandLine.arguments.dropFirst()
+guard iconToolArguments.count == 1, let iconSetDirectory = iconToolArguments.first else {
+    FileHandle.standardError.write("Usage : MakeAppIcon <dossier .iconset de sortie>\n".data(using: .utf8)!)
+    exit(1)
+}
+writeAppIconSet(to: iconSetDirectory)
 #elseif TESTING
 runTests()
 #else
