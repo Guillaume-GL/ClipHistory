@@ -1188,10 +1188,6 @@ func makeMenuBarIcon() -> NSImage {
 
 // MARK: - Lancement
 
-let app = NSApplication.shared
-let delegate = AppDelegate()
-app.delegate = delegate
-app.setActivationPolicy(.accessory)
 // Compilé avec -D MAKE_ICON (par build.sh) : écrit les PNG de l'icône dans le dossier passé en argument.
 // Compilé avec -D TESTING (bash build.sh test) : lance les tests de Tests.swift au lieu de l'app.
 #if MAKE_ICON
@@ -1199,5 +1195,12 @@ writeAppIconSet(to: CommandLine.arguments[1])
 #elseif TESTING
 runTests()
 #else
+// NSApplication et AppDelegate seulement dans la vraie app : créer NSApplication.shared connecte
+// le processus au serveur de fenêtres, inutile pour l'outil d'icône et les tests (qui pourraient
+// alors tourner sans session graphique).
+let app = NSApplication.shared
+let delegate = AppDelegate()
+app.delegate = delegate
+app.setActivationPolicy(.accessory)
 app.run()
 #endif
