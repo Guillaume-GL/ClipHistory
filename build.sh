@@ -83,6 +83,12 @@ rm -rf "$DEST/.$APP.new"
 cp -R "build/$APP" "$DEST/.$APP.new"
 # Quitte toute copie en cours, y compris l'ancienne copie de ~/Applications.
 pkill -x ClipHistory 2>/dev/null || true
+# pkill ne fait que demander à l'app de quitter : sans attendre sa fin, « open » peut
+# tomber sur le processus en train de s'arrêter et échouer (erreur -600). Attente max 5 s.
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+  pgrep -x ClipHistory >/dev/null || break
+  sleep 0.25
+done
 rm -rf "$DEST/.$APP.old"
 if [ -d "$DEST/$APP" ]; then mv "$DEST/$APP" "$DEST/.$APP.old"; fi
 restore_old() {
