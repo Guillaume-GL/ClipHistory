@@ -295,11 +295,13 @@ func testAppIconCornersAreTransparentAtEverySize(_ t: TestContext) {
     }
 }
 
-/// App icon criterion 2: the background is mint green. The sampled point is at 15% of the
-/// width from the left, half-way down: inside the rounded square, away from the paperclip.
-/// "Mint" = opaque and green clearly above red and blue, e.g. (0.60, 0.90, 0.75) passes,
-/// a blue (0.30, 0.50, 0.90) or grey (0.80, 0.80, 0.80) background fails.
-func testAppIconBackgroundIsMintGreenAtEverySize(_ t: TestContext) {
+/// App icon restyle (ink brush on paper): the background is light, neutral off-white paper.
+/// The sampled point is at 15% of the width from the left, half-way down: inside the rounded
+/// square, away from the paperclip. "Paper" = opaque, neutral (channels within 0.03 of each
+/// other) and light (every channel above 0.85).
+/// e.g. (0.96, 0.95, 0.94) passes; mint (0.55, 0.88, 0.72), cream (0.98, 0.93, 0.80)
+/// or mid grey (0.70, 0.70, 0.70) fails.
+func testAppIconBackgroundIsLightNeutralPaperAtEverySize(_ t: TestContext) {
     for size in appIconPixelSizes {
         let rep = renderAppIcon(pixels: size)
         let x = rep.pixelsWide * 15 / 100
@@ -314,8 +316,69 @@ func testAppIconBackgroundIsMintGreenAtEverySize(_ t: TestContext) {
         let described = "(r \(red), g \(green), b \(blue), a \(color.alphaComponent))"
         t.expectTrue(color.alphaComponent > 0.9,
                      "background pixel (\(x), \(y)) at \(size) px is opaque \(described)")
-        t.expectTrue(green - max(red, blue) >= 0.05,
-                     "background pixel (\(x), \(y)) at \(size) px is mint, green dominant \(described)")
+        let brightest = max(red, green, blue)
+        let darkest = min(red, green, blue)
+        t.expectTrue(brightest - darkest <= 0.03,
+                     "background pixel (\(x), \(y)) at \(size) px is neutral grey \(described)")
+        t.expectTrue(darkest > 0.85,
+                     "background pixel (\(x), \(y)) at \(size) px is light \(described)")
+    }
+}
+
+// MARK: - Menu-bar icon tests (makeMenuBarIcon in main.swift)
+
+/// Draws `image` into a bitmap of exactly `pixels` × `pixels` pixels, starting fully transparent.
+/// A bitmap context rather than NSImage.lockFocus: lockFocus follows the screen scale,
+/// so the pixel count would depend on the Mac running the tests.
+func renderIntoBitmap(_ image: NSImage, pixels: Int) -> NSBitmapImageRep {
+    let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: pixels, pixelsHigh: pixels,
+                               bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                               colorSpaceName: .calibratedRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+    let graphics = NSGraphicsContext(bitmapImageRep: rep)!
+    graphics.cgContext.clear(CGRect(x: 0, y: 0, width: pixels, height: pixels))
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = graphics
+    image.draw(in: NSRect(x: 0, y: 0, width: pixels, height: pixels))
+    NSGraphicsContext.restoreGraphicsState()
+    return rep
+}
+
+/// Menu-bar icon: a template image, so macOS tints it black on a light menu bar
+/// and white on a dark one. A plain (non-template) black image would vanish on a dark bar.
+func testMenuBarIconIsTemplate(_ t: TestContext) {
+    let icon = makeMenuBarIcon()
+    t.expectTrue(icon.isTemplate, "menu-bar icon isTemplate is true")
+}
+
+/// Menu-bar icon: 18 × 18 points, the usual size of a status item image.
+/// e.g. a 36 × 36 pt image (pixels mistaken for points) would overflow the menu bar.
+func testMenuBarIconIs18By18Points(_ t: TestContext) {
+    let icon = makeMenuBarIcon()
+    t.expectEqual(icon.size.width, 18, "menu-bar icon width in points")
+    t.expectEqual(icon.size.height, 18, "menu-bar icon height in points")
+}
+
+/// Menu-bar icon: drawn at 36 × 36 px (Retina), it shows a shape (some opaque pixels)
+/// that does not fill the canvas (the 4 corners stay transparent).
+/// An empty image fails the first check; a filled square fails the second.
+func testMenuBarIconHasOpaqueShapeAndTransparentCorners(_ t: TestContext) {
+    let rep = renderIntoBitmap(makeMenuBarIcon(), pixels: 36)
+
+    var opaqueCount = 0
+    for y in 0..<rep.pixelsHigh {
+        for x in 0..<rep.pixelsWide {
+            let alpha = srgbColor(of: rep, x: x, y: y)?.alphaComponent ?? 0
+            if alpha > 0.99 { opaqueCount += 1 }
+        }
+    }
+    t.expectTrue(opaqueCount > 0, "menu-bar icon drawn at 36 px has opaque pixels")
+
+    let last = rep.pixelsWide - 1
+    let lastRow = rep.pixelsHigh - 1
+    for (x, y) in [(0, 0), (last, 0), (0, lastRow), (last, lastRow)] {
+        let alpha = srgbColor(of: rep, x: x, y: y)?.alphaComponent ?? -1
+        t.expectTrue(alpha >= 0 && alpha < 0.01,
+                     "corner (\(x), \(y)) of the menu-bar icon drawn at 36 px is transparent (alpha \(alpha))")
     }
 }
 
@@ -338,7 +401,10 @@ func runTests() {
         ("testAppIconHasExactPixelSizeAtEverySize", testAppIconHasExactPixelSizeAtEverySize),
         ("testAppIconHasOpaquePixelsAtEverySize", testAppIconHasOpaquePixelsAtEverySize),
         ("testAppIconCornersAreTransparentAtEverySize", testAppIconCornersAreTransparentAtEverySize),
-        ("testAppIconBackgroundIsMintGreenAtEverySize", testAppIconBackgroundIsMintGreenAtEverySize),
+        ("testAppIconBackgroundIsLightNeutralPaperAtEverySize", testAppIconBackgroundIsLightNeutralPaperAtEverySize),
+        ("testMenuBarIconIsTemplate", testMenuBarIconIsTemplate),
+        ("testMenuBarIconIs18By18Points", testMenuBarIconIs18By18Points),
+        ("testMenuBarIconHasOpaqueShapeAndTransparentCorners", testMenuBarIconHasOpaqueShapeAndTransparentCorners),
     ]
 
     // Criterion 1: the tests must not touch the user's clipboard.
