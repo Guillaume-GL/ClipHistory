@@ -1,10 +1,13 @@
-// Tests for the clipboard history logic (class History in main.swift).
+// Tests for ClipHistory (main.swift): the clipboard history logic (class History),
+// the global shortcut settings, localization (strings / localized) and the icons
+// (renderAppIcon, makeMenuBarIcon).
 // No test framework: XCTest is not available with the Command Line Tools alone.
 // Run with: bash build.sh test
 // Compiled together with main.swift with -D TESTING; main.swift then calls runTests()
 // instead of starting the app.
 
 import AppKit
+import Carbon  // kVK_ANSI_V, cmdKey, controlKey, optionKey, shiftKey (hot key constants)
 
 // MARK: - Minimal assertion helper
 
@@ -238,6 +241,55 @@ func testOldStorageInfoIsLocalizedAndTakesTheFolderPath(_ t: TestContext) {
     t.expectTrue(french != english, "French and English texts differ (\"\(french)\")")
 }
 
+// MARK: - Global shortcut tests (hotKeyCode / hotKeyModifiers / hotKeyLabel in main.swift)
+
+/// Review M1: the global shortcut is ⌃⌘V. Compared with the Carbon constants, not raw numbers,
+/// so the test reads like the setting. e.g. cmdKey | optionKey (⌥⌘V, taken by the Finder) fails.
+func testHotKeyIsControlCommandV(_ t: TestContext) {
+    t.expectEqual(hotKeyCode, UInt32(kVK_ANSI_V), "hotKeyCode is the V key (kVK_ANSI_V)")
+    t.expectEqual(hotKeyModifiers, UInt32(cmdKey | controlKey), "hotKeyModifiers is exactly command + control")
+    t.expectEqual(hotKeyLabel, "⌃⌘V", "hotKeyLabel")
+}
+
+/// Review M1: the label shown in the menu matches the modifiers actually registered.
+/// Each modifier symbol is in the label if and only if its bit is set in hotKeyModifiers.
+/// e.g. label "⌥⌘V" with cmdKey | controlKey fails twice (⌃ missing, ⌥ extra).
+func testHotKeyLabelMatchesModifiers(_ t: TestContext) {
+    let symbols: [(symbol: String, flag: Int)] = [
+        ("⌃", controlKey), ("⌥", optionKey), ("⇧", shiftKey), ("⌘", cmdKey),
+    ]
+    for (symbol, flag) in symbols {
+        let modifierIsSet = (hotKeyModifiers & UInt32(flag)) != 0
+        let labelHasSymbol = hotKeyLabel.contains(symbol)
+        t.expectEqual(labelHasSymbol, modifierIsSet,
+                      "\"\(symbol)\" in hotKeyLabel \"\(hotKeyLabel)\" matches hotKeyModifiers")
+    }
+}
+
+/// Review M2: "menu.ignoreApp" is filled with the frontmost app name via String(format:).
+/// Exactly one "%" per text, and it is "%@" (same rule as "alert.oldStorage.info" above).
+/// e.g. "Ignore Copies from “%@”" passes; "%@ (%@)" or "%d apps" fails.
+func testIgnoreAppTextTakesExactlyOneAppName(_ t: TestContext) {
+    let key = "menu.ignoreApp"
+    guard let entry = strings[key] else {
+        t.expectTrue(false, "strings has no entry for \"\(key)\"")
+        return
+    }
+
+    for (language, text) in [("French", entry.fr), ("English", entry.en)] {
+        let percentCount = text.components(separatedBy: "%").count - 1
+        let placeholderCount = text.components(separatedBy: "%@").count - 1
+        t.expectEqual(placeholderCount, 1, "number of %@ in the \(language) text \"\(text)\"")
+        t.expectEqual(percentCount, 1, "number of % in the \(language) text \"\(text)\"")
+    }
+
+    let sampleAppName = "Safari"
+    let french = String(format: localized(key, languages: ["fr"]), sampleAppName)
+    let english = String(format: localized(key, languages: ["en"]), sampleAppName)
+    t.expectTrue(french.contains(sampleAppName), "French text \"\(french)\" contains \"\(sampleAppName)\"")
+    t.expectTrue(english.contains(sampleAppName), "English text \"\(english)\" contains \"\(sampleAppName)\"")
+}
+
 // MARK: - App icon tests (renderAppIcon in main.swift)
 
 /// The pixel sizes iconutil needs for an .icns (16, 32, 128, 256, 512 at 1x and 2x).
@@ -398,6 +450,9 @@ func runTests() {
         ("testShowHistoryEntryContainsHotKeyLabel", testShowHistoryEntryContainsHotKeyLabel),
         ("testUnknownKeyReturnsTheKeyItself", testUnknownKeyReturnsTheKeyItself),
         ("testOldStorageInfoIsLocalizedAndTakesTheFolderPath", testOldStorageInfoIsLocalizedAndTakesTheFolderPath),
+        ("testHotKeyIsControlCommandV", testHotKeyIsControlCommandV),
+        ("testHotKeyLabelMatchesModifiers", testHotKeyLabelMatchesModifiers),
+        ("testIgnoreAppTextTakesExactlyOneAppName", testIgnoreAppTextTakesExactlyOneAppName),
         ("testAppIconHasExactPixelSizeAtEverySize", testAppIconHasExactPixelSizeAtEverySize),
         ("testAppIconHasOpaquePixelsAtEverySize", testAppIconHasOpaquePixelsAtEverySize),
         ("testAppIconCornersAreTransparentAtEverySize", testAppIconCornersAreTransparentAtEverySize),
