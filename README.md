@@ -38,7 +38,7 @@ Au premier collage automatique, macOS demande l'autorisation **Accessibilité**
 
 ## Utilisation
 
-Une icône 📋 apparaît dans la barre des menus. **⌃⌘V** ouvre la fenêtre au niveau du pointeur.
+Une icône en forme de trombone apparaît dans la barre des menus. **⌃⌘V** ouvre la fenêtre au niveau du pointeur.
 
 | Touche | Action |
 |---|---|
@@ -99,7 +99,8 @@ En haut de `main.swift` :
 - `defaultExcludedApps` : les apps exclues par défaut (identifiants de bundle)
 
 L'icône de l'app est dessinée en code dans `main.swift` (section « Icône de l'app ») :
-couleurs du fond dans `appIconTopColor` / `appIconBottomColor`.
+tons du papier et de l'encre dans `appIconPaperWhite` / `appIconInkBlack` / `appIconFaceBlack`.
+L'icône de la barre des menus (`makeMenuBarIcon`) reprend le même trombone, sans visage.
 
 Puis relance `bash build.sh`.
 

@@ -427,10 +427,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     func buildStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        let description = L("statusItem.description")
-        statusItem.button?.image =
-            NSImage(systemSymbolName: "list.clipboard", accessibilityDescription: description)
-            ?? NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: description)
+        let icon = makeMenuBarIcon()
+        // Lu par VoiceOver : sans description, l'icône serait annoncée comme une simple « image ».
+        icon.accessibilityDescription = L("statusItem.description")
+        statusItem.button?.image = icon
         let menu = NSMenu()
         menu.delegate = self
         menuNeedsUpdate(menu)
@@ -772,11 +772,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
 // MARK: - Icône de l'app (dessinée en code, convertie en .icns par build.sh)
 
+// Style « encre » : un trombone peint au pinceau noir sur une carte de papier blanc cassé.
 // Tout est dessiné sur un canevas de 1024 × 1024, axe y vers le haut, puis mis à l'échelle.
-// Pour changer les couleurs du fond, modifier ces deux constantes.
-let appIconTopColor = NSColor(calibratedRed: 0.55, green: 0.88, blue: 0.72, alpha: 1)     // vert menthe clair
-let appIconBottomColor = NSColor(calibratedRed: 0.16, green: 0.62, blue: 0.50, alpha: 1)  // vert menthe foncé
 let appIconCanvas: CGFloat = 1024
+let appIconPaperWhite: CGFloat = 0.97    // niveau de gris du papier (1 = blanc pur)
+let appIconInkBlack: CGFloat = 0.08      // niveau de gris de l'encre du fil
+let appIconFaceBlack: CGFloat = 0.05     // pupilles et sourire, un peu plus noirs que le fil
+// Graine du générateur pseudo-aléatoire : la même graine donne la même icône à chaque compilation.
+let appIconRandomSeed: UInt64 = 7
 
 /// Dessine l'icône à exactement `pixels` × `pixels` pixels.
 /// On dessine dans un NSBitmapImageRep et pas via NSImage.lockFocus : lockFocus suit l'écran,
@@ -798,52 +801,54 @@ func renderAppIcon(pixels: Int) -> NSBitmapImageRep {
     // NSColor.cgColor et les dessins AppKit utilisent le contexte courant : on le fixe le temps du dessin.
     NSGraphicsContext.saveGraphicsState()
     NSGraphicsContext.current = graphics
-    drawAppIconBackground(ctx)
-    drawAppIconCharacter(ctx)
+    // Un seul générateur, partagé dans un ordre fixe (grain, fil, reflet, sourire) :
+    // changer cet ordre change le grain et les irrégularités du pinceau.
+    var random = AppIconRandom(seed: appIconRandomSeed)
+    drawAppIconPaper(ctx, random: &random)
+    drawAppIconCharacter(ctx, random: &random)
     NSGraphicsContext.restoreGraphicsState()
     return rep
 }
 
-/// Carré arrondi façon macOS, en retrait de 100 sur chaque bord (les icônes macOS ont une marge),
-/// avec un dégradé vertical du clair (haut) au foncé (bas).
-func drawAppIconBackground(_ ctx: CGContext) {
+/// Générateur pseudo-aléatoire minimal (congruentiel linéaire) : déterministe, contrairement
+/// à Double.random, pour que deux compilations produisent exactement la même icône.
+struct AppIconRandom {
+    var state: UInt64
+
+    init(seed: UInt64) {
+        state = seed
+    }
+
+    /// Valeur suivante, entre -1 et 1.
+    mutating func next() -> CGFloat {
+        // &* et &+ : multiplication et addition qui « débordent » sans planter (modulo 2^64).
+        state = state &* 6364136223846793005 &+ 1442695040888963407
+        // Les bits de poids fort sont les plus aléatoires de ce générateur : on prend ceux-là.
+        let highBits = state >> 33
+        let zeroToTwo = Double(highBits % 10_000) / 5_000.0
+        return CGFloat(zeroToTwo - 1.0)
+    }
+}
+
+func appIconGray(_ white: CGFloat, alpha: CGFloat = 1) -> CGColor {
+    NSColor(calibratedWhite: white, alpha: alpha).cgColor
+}
+
+/// Carré arrondi façon macOS, en retrait de 100 sur chaque bord (les icônes macOS ont une marge).
+func appIconSquarePath() -> CGPath {
     let inset: CGFloat = 100
     let cornerRadius: CGFloat = 185
     let squareRect = CGRect(x: inset, y: inset,
                             width: appIconCanvas - 2 * inset, height: appIconCanvas - 2 * inset)
-    let squarePath = CGPath(roundedRect: squareRect, cornerWidth: cornerRadius,
-                            cornerHeight: cornerRadius, transform: nil)
-    let colors = [appIconTopColor.cgColor, appIconBottomColor.cgColor] as CFArray
-    let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 1])!
-    let top = CGPoint(x: appIconCanvas / 2, y: squareRect.maxY)
-    let bottom = CGPoint(x: appIconCanvas / 2, y: squareRect.minY)
-
-    ctx.saveGState()
-    ctx.addPath(squarePath)
-    ctx.clip()
-    ctx.drawLinearGradient(gradient, start: top, end: bottom, options: [])
-    ctx.restoreGState()
-}
-
-/// Le trombone et son visage, légèrement penchés. Les coordonnées des parties sont celles
-/// du trombone droit ; la rotation est appliquée une seule fois ici pour tout le personnage.
-func drawAppIconCharacter(_ ctx: CGContext) {
-    let tiltAngle: CGFloat = -0.18   // radians, environ 10° dans le sens horaire
-    ctx.saveGState()
-    // Tourne autour du centre du canevas, puis recale le trombone (centré vers 530, 500) au milieu.
-    ctx.translateBy(x: 512, y: 512)
-    ctx.rotate(by: tiltAngle)
-    ctx.translateBy(x: -530, y: -500)
-    drawAppIconClip(ctx)
-    drawAppIconEyes(ctx)
-    drawAppIconBrows(ctx)
-    drawAppIconSmile(ctx)
-    ctx.restoreGState()
+    return CGPath(roundedRect: squareRect, cornerWidth: cornerRadius,
+                  cornerHeight: cornerRadius, transform: nil)
 }
 
 /// Le fil du trombone : un seul tracé, de l'extrémité de la branche intérieure
 /// à celle de la branche extérieure, en passant par les trois boucles.
-func drawAppIconClip(_ ctx: CGContext) {
+/// Coordonnées du trombone droit, centré vers (530, 500) ; voir appIconTilt pour l'inclinaison.
+/// Partagé avec l'icône de la barre des menus.
+func appIconClipPath() -> CGPath {
     let clip = CGMutablePath()
     clip.move(to: CGPoint(x: 480, y: 620))                                   // bout de la branche intérieure
     clip.addLine(to: CGPoint(x: 480, y: 380))
@@ -856,83 +861,261 @@ func drawAppIconClip(_ ctx: CGContext) {
     clip.addArc(center: CGPoint(x: 530, y: 300), radius: 130,
                 startAngle: .pi, endAngle: 2 * .pi, clockwise: false)        // grande boucle du bas
     clip.addLine(to: CGPoint(x: 660, y: 580))                                // bout de la branche extérieure
+    return clip
+}
 
-    ctx.setLineCap(.round)
-    ctx.setLineJoin(.round)
-    // Trois passes sur le même tracé, de la plus large à la plus fine : contour sombre (44),
-    // corps argenté (34), puis un reflet fin décalé vers le haut à gauche. Ça se lit comme du métal.
-    ctx.addPath(clip)
-    ctx.setLineWidth(44)
-    ctx.setStrokeColor(NSColor(calibratedWhite: 0.25, alpha: 1).cgColor)
-    ctx.strokePath()
+/// Inclinaison du trombone : environ 10° dans le sens horaire, autour du centre du canevas,
+/// le trombone (centré vers 530, 500) étant recalé au milieu. Partagée avec la barre des menus.
+func appIconTilt() -> CGAffineTransform {
+    let tiltAngle: CGFloat = -0.18   // radians
+    var transform = CGAffineTransform(translationX: 512, y: 512)
+    transform = transform.rotated(by: tiltAngle)
+    transform = transform.translatedBy(x: -530, y: -500)
+    return transform
+}
 
-    ctx.addPath(clip)
-    ctx.setLineWidth(34)
-    ctx.setStrokeColor(NSColor(calibratedWhite: 0.80, alpha: 1).cgColor)
-    ctx.strokePath()
+/// Le papier : la carte blanc cassé, puis un grain léger de petits points gris.
+func drawAppIconPaper(_ ctx: CGContext, random: inout AppIconRandom) {
+    let square = appIconSquarePath()
+    ctx.addPath(square)
+    ctx.setFillColor(appIconGray(appIconPaperWhite))
+    ctx.fillPath()
+    drawAppIconGrain(ctx, in: square, dotCount: 2500, random: &random)
+}
 
-    let highlightOffset = CGSize(width: -5, height: 5)
+/// Grain du papier : `dotCount` points gris moyens presque transparents, semés au hasard dans `area`.
+/// Avec un alpha de 0.07, un point sur le papier à 0.97 donne environ 0.94 : visible de près,
+/// le papier reste clair et neutre.
+func drawAppIconGrain(_ ctx: CGContext, in area: CGPath, dotCount: Int, random: inout AppIconRandom) {
+    let dotTone: CGFloat = 0.55
+    let dotAlpha: CGFloat = 0.07
+    let bounds = area.boundingBoxOfPath
     ctx.saveGState()
-    ctx.translateBy(x: highlightOffset.width, y: highlightOffset.height)
-    ctx.addPath(clip)
-    ctx.setLineWidth(9)
-    ctx.setStrokeColor(NSColor(calibratedWhite: 1.0, alpha: 0.9).cgColor)
-    ctx.strokePath()
+    ctx.addPath(area)
+    ctx.clip()
+    ctx.setFillColor(appIconGray(dotTone, alpha: dotAlpha))
+    for _ in 0..<dotCount {
+        // next() va de -1 à 1 : centre ± demi-largeur couvre tout le rectangle englobant.
+        let x = bounds.midX + random.next() * bounds.width / 2
+        let y = bounds.midY + random.next() * bounds.height / 2
+        let diameter = 1.5 + abs(random.next()) * 2     // de 1,5 à 3,5
+        ctx.fillEllipse(in: CGRect(x: x, y: y, width: diameter, height: diameter))
+    }
     ctx.restoreGState()
 }
 
-/// Deux yeux globuleux sur le haut du trombone, pupilles tournées vers le haut à droite.
+/// Le trombone et son visage, penchés, limités à la carte (l'ombre ne déborde pas du carré).
+func drawAppIconCharacter(_ ctx: CGContext, random: inout AppIconRandom) {
+    ctx.saveGState()
+    ctx.addPath(appIconSquarePath())
+    ctx.clip()
+    ctx.concatenate(appIconTilt())
+
+    let wire = appIconPolyline(of: appIconClipPath())
+    drawAppIconInkWire(ctx, wire: wire, random: &random)
+    drawAppIconHighlight(ctx, wire: wire, random: &random)
+    drawAppIconEyes(ctx)
+    drawAppIconSmile(ctx, random: &random)
+    ctx.restoreGState()
+}
+
+/// Le fil : un trait de pinceau noir, bouts arrondis, avec une ombre floue décalée vers le bas à droite
+/// (comme un aérographe), qui détache le trombone du papier.
+func drawAppIconInkWire(_ ctx: CGContext, wire: [CGPoint], random: inout AppIconRandom) {
+    let body = appIconBrushStroke(along: wire, width: 46, taper: 0.12, floor: 0.75, random: &random)
+    ctx.saveGState()
+    ctx.setShadow(offset: CGSize(width: 18, height: -22), blur: 34, color: appIconGray(0, alpha: 0.35))
+    ctx.addPath(body)
+    ctx.setFillColor(appIconGray(appIconInkBlack))
+    ctx.fillPath()
+    ctx.restoreGState()
+}
+
+/// Reflet : un trait de pinceau blanc et fin posé sur le fil, décalé vers le haut à gauche.
+func drawAppIconHighlight(_ ctx: CGContext, wire: [CGPoint], random: inout AppIconRandom) {
+    let highlight = appIconBrushStroke(along: wire, width: 9, taper: 0.25, floor: 0.6, random: &random)
+    ctx.saveGState()
+    ctx.translateBy(x: -6, y: 7)
+    ctx.addPath(highlight)
+    ctx.setFillColor(appIconGray(1, alpha: 0.85))
+    ctx.fillPath()
+    ctx.restoreGState()
+}
+
+/// Deux yeux sur le haut du trombone. Chaque œil chevauche le fil et le papier : un disque
+/// couleur papier pour le blanc, une pupille noire, un petit reflet blanc en haut à droite.
 func drawAppIconEyes(_ ctx: CGContext) {
-    let leftEyeCenter = CGPoint(x: 445, y: 640)
-    let rightEyeCenter = CGPoint(x: 560, y: 650)   // un peu plus haut : suit la pente du trombone
-    let pupilOffset = CGPoint(x: 14, y: 10)
-    drawAppIconEye(ctx, center: leftEyeCenter, pupilOffset: pupilOffset)
-    drawAppIconEye(ctx, center: rightEyeCenter, pupilOffset: pupilOffset)
+    let eyeCenters = [CGPoint(x: 445, y: 640), CGPoint(x: 560, y: 650)]   // le droit un peu plus haut
+    let whiteRadius: CGFloat = 36
+    let pupilRadius: CGFloat = 25
+    let glintSize: CGFloat = 12
+    for center in eyeCenters {
+        ctx.setFillColor(appIconGray(appIconPaperWhite))
+        ctx.fillEllipse(in: CGRect(x: center.x - whiteRadius, y: center.y - whiteRadius,
+                                   width: 2 * whiteRadius, height: 2 * whiteRadius))
+        ctx.setFillColor(appIconGray(appIconFaceBlack))
+        ctx.fillEllipse(in: CGRect(x: center.x - pupilRadius, y: center.y - pupilRadius,
+                                   width: 2 * pupilRadius, height: 2 * pupilRadius))
+        ctx.setFillColor(appIconGray(1))
+        ctx.fillEllipse(in: CGRect(x: center.x + 2, y: center.y + 6, width: glintSize, height: glintSize))
+    }
 }
 
-/// Un œil : blanc ovale cerclé de sombre, pupille noire, petit reflet blanc dans la pupille.
-func drawAppIconEye(_ ctx: CGContext, center: CGPoint, pupilOffset: CGPoint) {
-    let whiteRect = CGRect(x: center.x - 48, y: center.y - 58, width: 96, height: 116)
-    ctx.setFillColor(NSColor.white.cgColor)
-    ctx.fillEllipse(in: whiteRect)
-    ctx.setStrokeColor(NSColor(calibratedWhite: 0.15, alpha: 1).cgColor)
-    ctx.setLineWidth(8)
-    ctx.strokeEllipse(in: whiteRect)
-
-    let pupil = CGPoint(x: center.x + pupilOffset.x, y: center.y + pupilOffset.y)
-    ctx.setFillColor(NSColor(calibratedWhite: 0.08, alpha: 1).cgColor)
-    ctx.fillEllipse(in: CGRect(x: pupil.x - 24, y: pupil.y - 28, width: 48, height: 56))
-    ctx.setFillColor(NSColor.white.cgColor)
-    ctx.fillEllipse(in: CGRect(x: pupil.x - 4, y: pupil.y + 8, width: 14, height: 14))
-}
-
-/// Sourcils : le droit plus haut et plus arqué que le gauche, pour un air curieux.
-func drawAppIconBrows(_ ctx: CGContext) {
-    let leftBrow = CGMutablePath()
-    leftBrow.move(to: CGPoint(x: 400, y: 722))
-    leftBrow.addQuadCurve(to: CGPoint(x: 485, y: 728), control: CGPoint(x: 440, y: 748))
-    let rightBrow = CGMutablePath()
-    rightBrow.move(to: CGPoint(x: 520, y: 752))
-    rightBrow.addQuadCurve(to: CGPoint(x: 605, y: 770), control: CGPoint(x: 565, y: 800))
-
-    ctx.setStrokeColor(NSColor(calibratedWhite: 0.12, alpha: 1).cgColor)
-    ctx.setLineWidth(16)
-    ctx.addPath(leftBrow)
-    ctx.strokePath()
-    ctx.addPath(rightBrow)
-    ctx.strokePath()
-}
-
-/// Petit sourire entre les deux branches. Le point de contrôle est plus bas que les extrémités
-/// (505 contre 545-550), ce qui creuse la courbe vers le bas : un sourire, pas une moue.
-func drawAppIconSmile(_ ctx: CGContext) {
+/// Petit sourire au pinceau entre les deux branches. Le point de contrôle est plus bas que les
+/// extrémités (500 contre 548-552), ce qui creuse la courbe vers le bas : un sourire, pas une moue.
+func drawAppIconSmile(_ ctx: CGContext, random: inout AppIconRandom) {
     let smile = CGMutablePath()
-    smile.move(to: CGPoint(x: 470, y: 545))
-    smile.addQuadCurve(to: CGPoint(x: 560, y: 550), control: CGPoint(x: 512, y: 505))
-    ctx.setStrokeColor(NSColor(calibratedWhite: 0.12, alpha: 1).cgColor)
-    ctx.setLineWidth(12)
-    ctx.addPath(smile)
-    ctx.strokePath()
+    smile.move(to: CGPoint(x: 468, y: 548))
+    smile.addQuadCurve(to: CGPoint(x: 562, y: 552), control: CGPoint(x: 512, y: 500))
+    let stroke = appIconBrushStroke(along: appIconPolyline(of: smile), width: 16, taper: 0.3, floor: 0.6,
+                                    random: &random)
+    ctx.addPath(stroke)
+    ctx.setFillColor(appIconGray(appIconFaceBlack))
+    ctx.fillPath()
+}
+
+/// Un trait de pinceau sous forme de surface pleine dont la largeur suit une « pression » de stylet :
+/// elle monte au début du trait, reste pleine au milieu, redescend à la fin.
+///
+/// `t` = position le long du trait (0 = début, 1 = fin). Avec taper 0.12 et floor 0.75 :
+///   t = 0     → pression 0 relevée au plancher → 75 % de `width`
+///   t = 0.03  → racine(0.03 / 0.12) = 0.5 → plancher → 75 %
+///   t = 0.09  → racine(0.75) ≈ 0.87 → 87 %
+///   t ≥ 0.12 et ≤ 0.88 → 100 % (le milieu du trait)
+/// La racine carrée fait monter la largeur vite puis lentement, comme un pinceau qu'on appuie.
+/// `jitter` ajoute une irrégularité douce de la pression (± quelques %), lissée d'un point à l'autre.
+/// Quand `floor` dépasse 0.5, les deux bouts sont arrondis par un disque : sinon un trait
+/// encore épais s'arrêterait net, coupé à angle droit.
+func appIconBrushStroke(along line: [CGPoint], width: CGFloat, taper: CGFloat, floor: CGFloat,
+                        jitter: CGFloat = 0.06, random: inout AppIconRandom) -> CGPath {
+    let distances = appIconCumulativeDistances(line)
+    let totalLength = max(distances[distances.count - 1], 1)
+    var leftEdge: [CGPoint] = []
+    var rightEdge: [CGPoint] = []
+    var pressureNoise: CGFloat = 0
+
+    for index in 0..<line.count {
+        // Normale = direction du trait tournée de 90°, estimée avec les deux points voisins.
+        let previous = line[max(0, index - 1)]
+        let following = line[min(line.count - 1, index + 1)]
+        let dx = following.x - previous.x
+        let dy = following.y - previous.y
+        let length = max(hypot(dx, dy), 0.001)
+        let normal = CGPoint(x: -dy / length, y: dx / length)
+
+        let t = distances[index] / totalLength
+        let rise = min(1, t / taper)
+        let fall = min(1, (1 - t) / taper)
+        let pressure = sqrt(max(0, rise)) * sqrt(max(0, fall))
+        // Moyenne glissante : 90 % de l'ancienne valeur, 10 % de nouveau hasard → variation lente.
+        pressureNoise = pressureNoise * 0.9 + random.next() * 0.1
+        let wobble = 1 + jitter * pressureNoise * 4
+        let halfWidth = width * max(floor, pressure) * wobble / 2
+
+        let point = line[index]
+        leftEdge.append(CGPoint(x: point.x + normal.x * halfWidth, y: point.y + normal.y * halfWidth))
+        rightEdge.append(CGPoint(x: point.x - normal.x * halfWidth, y: point.y - normal.y * halfWidth))
+    }
+
+    // Contour fermé : on longe le bord gauche du début à la fin, puis le bord droit en revenant.
+    let shape = CGMutablePath()
+    shape.addLines(between: leftEdge + rightEdge.reversed())
+    shape.closeSubpath()
+    if floor > 0.5 {
+        for index in [0, line.count - 1] {
+            let center = line[index]
+            let radius = hypot(leftEdge[index].x - rightEdge[index].x, leftEdge[index].y - rightEdge[index].y) / 2
+            shape.addEllipse(in: CGRect(x: center.x - radius, y: center.y - radius,
+                                        width: 2 * radius, height: 2 * radius))
+        }
+    }
+    return shape
+}
+
+/// Distance parcourue depuis le début de la ligne, pour chaque point.
+/// Ex. [(0,0), (3,4), (3,10)] → [0, 5, 11].
+func appIconCumulativeDistances(_ line: [CGPoint]) -> [CGFloat] {
+    var distances: [CGFloat] = [0]
+    for index in 1..<line.count {
+        let step = hypot(line[index].x - line[index - 1].x, line[index].y - line[index - 1].y)
+        distances.append(distances[index - 1] + step)
+    }
+    return distances
+}
+
+/// Remplace un tracé (droites, arcs, courbes) par une suite de points espacés d'environ 6 unités,
+/// le long de laquelle appIconBrushStroke fait varier la largeur. Seul le premier sous-tracé
+/// est gardé : le trombone et le sourire n'en ont qu'un.
+/// Les arcs de CGPath sont stockés comme des courbes de Bézier cubiques : on échantillonne les courbes
+/// (16 points pour une quadratique, 20 pour une cubique), puis on recoupe chaque segment.
+func appIconPolyline(of path: CGPath) -> [CGPoint] {
+    let spacing: CGFloat = 6
+    var points: [CGPoint] = []
+    var last = CGPoint.zero
+
+    // Ajoute les points de `last` à `end`, espacés d'environ `spacing`. Ex. de (0,0) à (13,0) → (6.5,0), (13,0).
+    func addSegment(to end: CGPoint) {
+        let segmentCount = max(1, Int(hypot(end.x - last.x, end.y - last.y) / spacing))
+        for step in 1...segmentCount {
+            let t = CGFloat(step) / CGFloat(segmentCount)
+            points.append(CGPoint(x: last.x + (end.x - last.x) * t, y: last.y + (end.y - last.y) * t))
+        }
+        last = end
+    }
+
+    var subpathCount = 0
+    path.applyWithBlock { elementPointer in
+        let element = elementPointer.pointee
+        if subpathCount > 1 { return }
+        switch element.type {
+        case .moveToPoint:
+            subpathCount += 1
+            if subpathCount > 1 { return }
+            last = element.points[0]
+            points = [last]
+        case .addLineToPoint:
+            addSegment(to: element.points[0])
+        case .addQuadCurveToPoint:
+            let start = last
+            let control = element.points[0]
+            let end = element.points[1]
+            for step in 1...16 {
+                let t = CGFloat(step) / 16
+                addSegment(to: appIconQuadPoint(start, control, end, t: t))
+            }
+        case .addCurveToPoint:
+            let start = last
+            let control1 = element.points[0]
+            let control2 = element.points[1]
+            let end = element.points[2]
+            for step in 1...20 {
+                let t = CGFloat(step) / 20
+                addSegment(to: appIconCubicPoint(start, control1, control2, end, t: t))
+            }
+        case .closeSubpath:
+            if let first = points.first { addSegment(to: first) }
+        @unknown default:
+            break
+        }
+    }
+    return points
+}
+
+/// Point d'une courbe de Bézier quadratique à la position t (0 = début, 1 = fin).
+func appIconQuadPoint(_ start: CGPoint, _ control: CGPoint, _ end: CGPoint, t: CGFloat) -> CGPoint {
+    let u = 1 - t
+    let x = u * u * start.x + 2 * u * t * control.x + t * t * end.x
+    let y = u * u * start.y + 2 * u * t * control.y + t * t * end.y
+    return CGPoint(x: x, y: y)
+}
+
+/// Point d'une courbe de Bézier cubique à la position t (0 = début, 1 = fin).
+func appIconCubicPoint(_ start: CGPoint, _ control1: CGPoint, _ control2: CGPoint, _ end: CGPoint,
+                       t: CGFloat) -> CGPoint {
+    let u = 1 - t
+    let x = u * u * u * start.x + 3 * u * u * t * control1.x + 3 * u * t * t * control2.x + t * t * t * end.x
+    let y = u * u * u * start.y + 3 * u * u * t * control1.y + 3 * u * t * t * control2.y + t * t * t * end.y
+    return CGPoint(x: x, y: y)
 }
 
 /// Fichiers d'un .iconset : nom attendu par iconutil → taille en pixels.
@@ -962,6 +1145,45 @@ func writeAppIconSet(to directory: String) {
         FileHandle.standardError.write("Échec de l'écriture de l'icône : \(error)\n".data(using: .utf8)!)
         exit(1)
     }
+}
+
+// MARK: - Icône de la barre des menus
+
+/// Paperclip silhouette for the menu bar: an 18 × 18 pt template image (macOS tints it for light/dark bars).
+/// Même trombone et même inclinaison que l'icône de l'app, sans visage, en un trait noir uni :
+/// en mode « template », macOS ne garde que la transparence et le teinte selon la barre.
+/// Dessinée à la demande (drawingHandler) : nette en 1x comme en Retina.
+func makeMenuBarIcon() -> NSImage {
+    let iconSize: CGFloat = 18     // points
+    let margin: CGFloat = 0.5      // points laissés vides sur chaque bord
+    let lineWidth: CGFloat = 1.2   // points ; plus épais, les boucles imbriquées se touchent
+    let image = NSImage(size: NSSize(width: iconSize, height: iconSize), flipped: false) { rect in
+        guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+        var tilt = appIconTilt()
+        guard let tiltedClip = appIconClipPath().copy(using: &tilt) else { return false }
+
+        // Mise à l'échelle pour que le trombone penché, trait compris, tienne dans le carré moins la marge.
+        // Ex. trombone penché haut d'environ 645 unités, place disponible 18 - 1 - 1,2 = 15,8 pt
+        // → échelle ≈ 0,0245 (le trombone fait environ 15,8 × 7,6 pt).
+        let clipBounds = tiltedClip.boundingBoxOfPath
+        let available = min(rect.width, rect.height) - 2 * margin - lineWidth
+        let scale = available / max(clipBounds.width, clipBounds.height)
+
+        // Centre le trombone dans l'image : on place le centre de ses bornes au centre de `rect`.
+        ctx.translateBy(x: rect.midX, y: rect.midY)
+        ctx.scaleBy(x: scale, y: scale)
+        ctx.translateBy(x: -clipBounds.midX, y: -clipBounds.midY)
+
+        ctx.addPath(tiltedClip)
+        ctx.setLineCap(.round)
+        ctx.setLineJoin(.round)
+        ctx.setLineWidth(lineWidth / scale)   // l'épaisseur est exprimée avant la mise à l'échelle
+        ctx.setStrokeColor(NSColor.black.cgColor)
+        ctx.strokePath()
+        return true
+    }
+    image.isTemplate = true
+    return image
 }
 
 // MARK: - Lancement
