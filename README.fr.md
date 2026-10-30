@@ -49,6 +49,7 @@ Une icône en forme de trombone apparaît dans la barre des menus. **⌃⌘V** o
 | ↩ ou clic | Coller avec la mise en forme d'origine |
 | ⌥↩ ou ⌥ clic | Coller en texte brut |
 | ⌘1 … ⌘9 | Coller directement l'un des 9 premiers éléments |
+| ⌥⌘1 … ⌥⌘9 | Idem, en texte brut |
 | ⌘⌫ | Retirer l'élément de l'historique |
 | Échap | Fermer |
 

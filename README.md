@@ -49,6 +49,7 @@ A paperclip icon appears in the menu bar. **⌃⌘V** opens the window at the po
 | ↩ or click | Paste with the original formatting |
 | ⌥↩ or ⌥ click | Paste as plain text |
 | ⌘1 … ⌘9 | Paste one of the first 9 items directly |
+| ⌥⌘1 … ⌥⌘9 | Same, as plain text |
 | ⌘⌫ | Remove the item from the history |
 | Esc | Close |
 
