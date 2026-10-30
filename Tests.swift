@@ -211,6 +211,87 @@ func testUnknownKeyReturnsTheKeyItself(_ t: TestContext) {
     t.expectEqual(englishText, missingKey, "localized text for an unknown key, languages [en]")
 }
 
+// MARK: - App icon tests (renderAppIcon in main.swift)
+
+/// The pixel sizes iconutil needs for an .icns (16, 32, 128, 256, 512 at 1x and 2x).
+let appIconPixelSizes = [16, 32, 64, 128, 256, 512, 1024]
+
+/// Color of one pixel converted to sRGB, so red/green/blue can be compared whatever
+/// color space the bitmap uses. x and y are pixel coordinates (0, 0 = a corner).
+/// Returns nil if the pixel cannot be read.
+func srgbColor(of rep: NSBitmapImageRep, x: Int, y: Int) -> NSColor? {
+    guard let color = rep.colorAt(x: x, y: y) else { return nil }
+    return color.usingColorSpace(.sRGB)
+}
+
+/// App icon criterion 2: the image is exactly `size` × `size` pixels.
+/// Pixels, not points: drawing through NSImage.lockFocus on a Retina screen gives 2× pixels
+/// (e.g. asked 16 → got 32), and iconutil would reject or mislabel such a PNG.
+func testAppIconHasExactPixelSizeAtEverySize(_ t: TestContext) {
+    for size in appIconPixelSizes {
+        let rep = renderAppIcon(pixels: size)
+        t.expectEqual(rep.pixelsWide, size, "pixel width of the icon rendered at \(size) px")
+        t.expectEqual(rep.pixelsHigh, size, "pixel height of the icon rendered at \(size) px")
+    }
+}
+
+/// App icon criterion 2: the image is not empty, at least some pixels are fully opaque.
+/// Samples a grid of about 16 × 16 points rather than every pixel (1024 × 1024 colorAt calls is slow).
+func testAppIconHasOpaquePixelsAtEverySize(_ t: TestContext) {
+    for size in appIconPixelSizes {
+        let rep = renderAppIcon(pixels: size)
+        let step = max(1, rep.pixelsWide / 16)
+        var opaqueCount = 0
+        for y in stride(from: 0, to: rep.pixelsHigh, by: step) {
+            for x in stride(from: 0, to: rep.pixelsWide, by: step) {
+                let alpha = srgbColor(of: rep, x: x, y: y)?.alphaComponent ?? 0
+                if alpha > 0.99 { opaqueCount += 1 }
+            }
+        }
+        t.expectTrue(opaqueCount > 0, "icon rendered at \(size) px has opaque pixels")
+    }
+}
+
+/// App icon criterion 2: the background is a rounded square inset from the canvas edges,
+/// so the 4 corner pixels of the canvas are fully transparent (a full-canvas fill would fail).
+func testAppIconCornersAreTransparentAtEverySize(_ t: TestContext) {
+    for size in appIconPixelSizes {
+        let rep = renderAppIcon(pixels: size)
+        let last = rep.pixelsWide - 1
+        let lastRow = rep.pixelsHigh - 1
+        let corners = [(0, 0), (last, 0), (0, lastRow), (last, lastRow)]
+        for (x, y) in corners {
+            let alpha = srgbColor(of: rep, x: x, y: y)?.alphaComponent ?? -1
+            t.expectTrue(alpha >= 0 && alpha < 0.01,
+                         "corner (\(x), \(y)) of the icon rendered at \(size) px is transparent (alpha \(alpha))")
+        }
+    }
+}
+
+/// App icon criterion 2: the background is mint green. The sampled point is at 15% of the
+/// width from the left, half-way down: inside the rounded square, away from the paperclip.
+/// "Mint" = opaque and green clearly above red and blue, e.g. (0.60, 0.90, 0.75) passes,
+/// a blue (0.30, 0.50, 0.90) or grey (0.80, 0.80, 0.80) background fails.
+func testAppIconBackgroundIsMintGreenAtEverySize(_ t: TestContext) {
+    for size in appIconPixelSizes {
+        let rep = renderAppIcon(pixels: size)
+        let x = rep.pixelsWide * 15 / 100
+        let y = rep.pixelsHigh / 2
+        guard let color = srgbColor(of: rep, x: x, y: y) else {
+            t.expectTrue(false, "pixel (\(x), \(y)) of the icon rendered at \(size) px is readable in sRGB")
+            continue
+        }
+        let red = color.redComponent
+        let green = color.greenComponent
+        let blue = color.blueComponent
+        let described = "(r \(red), g \(green), b \(blue), a \(color.alphaComponent))"
+        t.expectTrue(color.alphaComponent > 0.9,
+                     "background pixel (\(x), \(y)) at \(size) px is opaque \(described)")
+        t.expectTrue(green - max(red, blue) >= 0.05,
+                     "background pixel (\(x), \(y)) at \(size) px is mint, green dominant \(described)")
+    }
+}
+
 // MARK: - Runner
 
 /// Runs every test, prints each name with PASS/FAIL and failure details,
@@ -226,6 +307,10 @@ func runTests() {
         ("testEveryStringHasFrenchAndEnglishText", testEveryStringHasFrenchAndEnglishText),
         ("testShowHistoryEntryContainsHotKeyLabel", testShowHistoryEntryContainsHotKeyLabel),
         ("testUnknownKeyReturnsTheKeyItself", testUnknownKeyReturnsTheKeyItself),
+        ("testAppIconHasExactPixelSizeAtEverySize", testAppIconHasExactPixelSizeAtEverySize),
+        ("testAppIconHasOpaquePixelsAtEverySize", testAppIconHasOpaquePixelsAtEverySize),
+        ("testAppIconCornersAreTransparentAtEverySize", testAppIconCornersAreTransparentAtEverySize),
+        ("testAppIconBackgroundIsMintGreenAtEverySize", testAppIconBackgroundIsMintGreenAtEverySize),
     ]
 
     // Criterion 1: the tests must not touch the user's clipboard.
