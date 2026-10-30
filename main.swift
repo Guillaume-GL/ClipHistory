@@ -11,8 +11,8 @@ import ServiceManagement
 // MARK: - Réglages
 
 let hotKeyCode = UInt32(kVK_ANSI_V)                   // touche V (même position en AZERTY)
-let hotKeyModifiers = UInt32(cmdKey | optionKey)      // ⌥⌘
-let hotKeyLabel = "⌥⌘V"
+let hotKeyModifiers = UInt32(cmdKey | controlKey)     // ⌃⌘ (⌥⌘V est pris par le Finder)
+let hotKeyLabel = "⌃⌘V"
 let pollInterval: TimeInterval = 0.5
 let searchableLength = 2000                           // caractères indexés pour la recherche
 let maxMemoryBytes = 512 * 1024 * 1024                // budget de conservation : au-delà, les plus anciens sont oubliés

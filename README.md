@@ -36,7 +36,7 @@ Au premier collage automatique, macOS demande l'autorisation **Accessibilité**
 
 ## Utilisation
 
-Une icône 📋 apparaît dans la barre des menus. **⌥⌘V** ouvre la fenêtre au niveau du pointeur.
+Une icône 📋 apparaît dans la barre des menus. **⌃⌘V** ouvre la fenêtre au niveau du pointeur.
 
 | Touche | Action |
 |---|---|
@@ -83,7 +83,7 @@ Recopier un contenu déjà présent le remonte en tête au lieu de créer un dou
   ponctuel reste possible pendant la lecture d'une grosse copie.
 - **Collage automatique** : ⌘V n'est envoyé que si l'app au premier plan est toujours celle
   d'où la fenêtre a été ouverte. La fenêtre ou le champ de destination ne sont pas vérifiés.
-- **⌥⌘V** remplace, tant que l'app tourne, le raccourci du Finder « Déplacer l'élément ici ».
+- **⌃⌘V** remplace, tant que l'app tourne, le « Collage spécial » d'Excel et de Word pour Mac.
 - Effacer de la mémoire n'est pas un effacement sécurisé.
 
 ## Personnaliser
