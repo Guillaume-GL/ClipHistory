@@ -1029,12 +1029,18 @@ func appIconBrushStroke(along line: [CGPoint], width: CGFloat, taper: CGFloat, f
     shape.addLines(between: leftEdge + rightEdge.reversed())
     shape.closeSubpath()
     if floor > 0.5 {
+        let caps = CGMutablePath()
         for index in [0, line.count - 1] {
             let center = line[index]
             let radius = hypot(leftEdge[index].x - rightEdge[index].x, leftEdge[index].y - rightEdge[index].y) / 2
-            shape.addEllipse(in: CGRect(x: center.x - radius, y: center.y - radius,
-                                        width: 2 * radius, height: 2 * radius))
+            caps.addEllipse(in: CGRect(x: center.x - radius, y: center.y - radius,
+                                       width: 2 * radius, height: 2 * radius))
         }
+        // Fusion plutôt qu'ajout dans le même chemin : le disque est tracé dans le sens inverse du
+        // contour, et le remplissage (règle « non nulle ») annule les deux sens là où ils se recouvrent.
+        //   avant : bout du fil = disque moitié noir (au-delà du bout), moitié clair (le trou sur le trait)
+        //   après : bout du fil = disque entièrement noir, un vrai bout rond
+        return shape.union(caps)
     }
     return shape
 }
