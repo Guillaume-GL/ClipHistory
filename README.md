@@ -19,8 +19,14 @@ bash build.sh
 ```
 
 Le script compile l'app, la signe en local (signature *ad hoc*), l'installe dans
-`~/Applications/ClipHistory.app` et la lance. Si la nouvelle version ne démarre pas,
-l'ancienne est remise en place.
+`/Applications/ClipHistory.app` et la lance. Si la nouvelle version ne démarre pas,
+l'ancienne est remise en place. Pas besoin de `sudo` si ton compte est administrateur.
+
+> Les anciennes versions du script installaient l'app dans `~/Applications`. S'il trouve
+> cette ancienne copie, le script la supprime une fois la nouvelle lancée (elle pourrait
+> sinon être relancée par « Ouvrir à la connexion »). Après ce déplacement, réactive
+> ClipHistory dans la liste **Accessibilité** et recoche **Ouvrir à la connexion** dans
+> le menu de l'icône.
 
 Au premier collage automatique, macOS demande l'autorisation **Accessibilité**
 (Réglages Système > Confidentialité et sécurité > Accessibilité).
@@ -90,9 +96,19 @@ En haut de `main.swift` :
 
 Puis relance `bash build.sh`.
 
+## Tests
+
+```bash
+bash build.sh test
+```
+
+Compile `main.swift` avec `Tests.swift` et lance les tests de l'historique, sans installer
+ni lancer l'app, et sans toucher à ton presse-papiers. Chaque test s'affiche avec `PASS` ou
+`FAIL` ; le code de retour est 0 si tout passe, différent de 0 sinon.
+
 ## Désinstaller
 
 1. Menu de l'icône > Quitter (et décocher « Ouvrir à la connexion » au préalable)
-2. `rm -rf ~/Applications/ClipHistory.app`
+2. `rm -rf /Applications/ClipHistory.app`
 3. Facultatif : `defaults delete local.cliphistory` pour effacer les réglages
 4. Retirer ClipHistory de la liste Accessibilité

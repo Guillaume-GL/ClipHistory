@@ -1,7 +1,7 @@
 // ClipHistory — historique du presse-papiers façon Win+V, sans dépendance.
 // Aucun contenu de l'historique n'est enregistré par l'app : il reste en mémoire et disparaît
 // à la fermeture. Seuls les réglages (pause, collage auto, apps exclues) vont dans les préférences.
-// Compilation et installation : bash build.sh
+// Compilation et installation : bash build.sh — tests : bash build.sh test
 
 import AppKit
 import Carbon
@@ -714,4 +714,9 @@ let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate
 app.setActivationPolicy(.accessory)
+// Compilé avec -D TESTING (bash build.sh test) : lance les tests de Tests.swift au lieu de l'app.
+#if TESTING
+runTests()
+#else
 app.run()
+#endif
