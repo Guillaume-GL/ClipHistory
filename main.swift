@@ -40,6 +40,56 @@ let defaultExcludedApps = [
 /// Touches 1 à 9 de la rangée du haut (codes physiques, indépendants de l'AZERTY).
 let digitKeyCodes: [UInt16] = [18, 19, 20, 21, 23, 22, 26, 28, 25]
 
+// MARK: - Textes de l'interface (français / anglais)
+
+/// Tous les textes visibles de l'interface, par clé.
+/// « %@ » marque une valeur connue seulement à l'exécution (le nom d'une app),
+/// remplie avec String(format:) là où le texte est utilisé.
+let strings: [String: (fr: String, en: String)] = [
+    // Menu de l'icône
+    "menu.showHistory": (fr: "Afficher l'historique (\(hotKeyLabel))",
+                         en: "Show History (\(hotKeyLabel))"),
+    "menu.pauseCapture": (fr: "Suspendre la capture", en: "Pause Capture"),
+    "menu.autoPaste": (fr: "Coller automatiquement", en: "Paste Automatically"),
+    "menu.openAtLogin": (fr: "Ouvrir à la connexion", en: "Open at Login"),
+    "menu.ignoreApp": (fr: "Ignorer les copies depuis « %@ »", en: "Ignore Copies from “%@”"),
+    "menu.ignoredApps": (fr: "Apps ignorées", en: "Ignored Apps"),
+    "menu.ignoredApps.tooltip": (fr: "Cliquer pour ne plus ignorer cette app",
+                                 en: "Click to stop ignoring this app"),
+    "menu.ignoredApps.none": (fr: "Aucune", en: "None"),
+    "menu.clear": (fr: "Vider l'historique et le presse-papiers", en: "Clear History and Clipboard"),
+    "menu.quit": (fr: "Quitter ClipHistory", en: "Quit ClipHistory"),
+    "statusItem.description": (fr: "Historique du presse-papiers", en: "Clipboard History"),
+    // Fenêtre de l'historique
+    "panel.searchPlaceholder": (fr: "Rechercher dans l'historique", en: "Search history"),
+    "panel.footer": (fr: "↩ Coller   ⌥↩ Texte brut   ⌘1–9 Coller n° 1–9   ⌘⌫ Retirer   Échap Fermer",
+                     en: "↩ Paste   ⌥↩ Plain Text   ⌘1–9 Paste #1–9   ⌘⌫ Remove   Esc Close"),
+    // Alertes
+    "alert.hotKeyTaken": (fr: "Le raccourci \(hotKeyLabel) est déjà utilisé par une autre app.",
+                          en: "The \(hotKeyLabel) shortcut is already used by another app."),
+    "alert.hotKeyTaken.info": (fr: "Change hotKeyCode / hotKeyModifiers en haut de main.swift puis relance build.sh.",
+                               en: "Change hotKeyCode / hotKeyModifiers at the top of main.swift, then run build.sh again."),
+    "alert.loginFailed": (fr: "Impossible de modifier l'ouverture à la connexion.",
+                          en: "Couldn't change Open at Login."),
+    "alert.oldStorage": (fr: "Ancien historique encore présent sur le disque.",
+                         en: "Old history still on disk."),
+]
+
+/// Texte de `key` dans la langue choisie d'après `languages` (langues préférées, la première d'abord).
+/// Seule la première langue compte : ["fr-CA", "en"] → français ; ["en", "fr"] → anglais ; [] → anglais.
+/// Clé inconnue → la clé elle-même (« menu.qiut » s'affiche tel quel : la faute se voit dans le menu).
+func localized(_ key: String, languages: [String]) -> String {
+    guard let entry = strings[key] else { return key }
+    let firstLanguage = languages.first ?? ""
+    let isFrench = firstLanguage.hasPrefix("fr")
+    return isFrench ? entry.fr : entry.en
+}
+
+/// Texte de `key` dans la langue de macOS (Réglages Système > Général > Langue et région).
+func L(_ key: String) -> String {
+    return localized(key, languages: Locale.preferredLanguages)
+}
+
 // MARK: - Historique en mémoire
 
 struct Flavor {
@@ -321,11 +371,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
         hotKeyAction = { [weak self] in self?.togglePanel() }
         if !registerHotKey() {
-            alert("Le raccourci \(hotKeyLabel) est déjà utilisé par une autre app.",
-                  info: "Change hotKeyCode / hotKeyModifiers en haut de main.swift puis relance build.sh.")
+            alert(L("alert.hotKeyTaken"), info: L("alert.hotKeyTaken.info"))
         }
         if let problem = removeOldStorage() {
-            alert("Ancien historique encore présent sur le disque.", info: problem)
+            alert(L("alert.oldStorage"), info: problem)
         }
     }
 
@@ -371,9 +420,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     func buildStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        let description = L("statusItem.description")
         statusItem.button?.image =
-            NSImage(systemSymbolName: "list.clipboard", accessibilityDescription: "Historique du presse-papiers")
-            ?? NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: "Historique du presse-papiers")
+            NSImage(systemSymbolName: "list.clipboard", accessibilityDescription: description)
+            ?? NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: description)
         let menu = NSMenu()
         menu.delegate = self
         menuNeedsUpdate(menu)
@@ -383,16 +433,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     /// Menu reconstruit à chaque ouverture, pour proposer d'exclure l'app au premier plan.
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        menu.addItem(item("Afficher l'historique (\(hotKeyLabel))", #selector(togglePanel)))
+        menu.addItem(item(L("menu.showHistory"), #selector(togglePanel)))
         menu.addItem(.separator())
 
-        let pause = item("Mettre la capture en pause", #selector(togglePause))
+        let pause = item(L("menu.pauseCapture"), #selector(togglePause))
         pause.state = paused ? .on : .off
         menu.addItem(pause)
-        let auto = item("Coller automatiquement", #selector(toggleAutoPaste))
+        let auto = item(L("menu.autoPaste"), #selector(toggleAutoPaste))
         auto.state = autoPaste ? .on : .off
         menu.addItem(auto)
-        let login = item("Ouvrir à la connexion", #selector(toggleLogin))
+        let login = item(L("menu.openAtLogin"), #selector(toggleLogin))
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(login)
         menu.addItem(.separator())
@@ -401,8 +451,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
            let bundleID = front.bundleIdentifier,
            bundleID != Bundle.main.bundleIdentifier,
            !excludedApps.contains(bundleID) {
-            let exclude = item("Ne plus capturer depuis « \(front.localizedName ?? bundleID) »",
-                               #selector(excludeApp(_:)))
+            // Le texte contient « %@ », remplacé par le nom de l'app au premier plan :
+            // "Ignorer les copies depuis « %@ »" + "Safari" → "Ignorer les copies depuis « Safari »"
+            let frontName = front.localizedName ?? bundleID
+            let excludeTitle = String(format: L("menu.ignoreApp"), frontName)
+            let exclude = item(excludeTitle, #selector(excludeApp(_:)))
             exclude.representedObject = bundleID
             menu.addItem(exclude)
         }
@@ -411,17 +464,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             let i = item(appName(bundleID), #selector(includeApp(_:)))
             i.representedObject = bundleID
             i.state = .on
-            i.toolTip = "Cliquer pour capturer à nouveau depuis cette app"
+            i.toolTip = L("menu.ignoredApps.tooltip")
             excludedMenu.addItem(i)
         }
-        if excludedApps.isEmpty { excludedMenu.addItem(withTitle: "Aucune", action: nil, keyEquivalent: "") }
-        let excludedItem = NSMenuItem(title: "Apps exclues", action: nil, keyEquivalent: "")
+        if excludedApps.isEmpty {
+            excludedMenu.addItem(withTitle: L("menu.ignoredApps.none"), action: nil, keyEquivalent: "")
+        }
+        let excludedItem = NSMenuItem(title: L("menu.ignoredApps"), action: nil, keyEquivalent: "")
         excludedItem.submenu = excludedMenu
         menu.addItem(excludedItem)
         menu.addItem(.separator())
 
-        menu.addItem(item("Vider l'historique et le presse-papiers", #selector(clearHistory)))
-        menu.addItem(item("Quitter ClipHistory", #selector(quit)))
+        menu.addItem(item(L("menu.clear"), #selector(clearHistory)))
+        menu.addItem(item(L("menu.quit"), #selector(quit)))
     }
 
     func item(_ title: String, _ action: Selector) -> NSMenuItem {
@@ -462,7 +517,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 try SMAppService.mainApp.register()
             }
         } catch {
-            alert("Impossible de modifier l'ouverture à la connexion.", info: error.localizedDescription)
+            alert(L("alert.loginFailed"), info: error.localizedDescription)
         }
     }
 
@@ -518,7 +573,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         panel.contentView = bg
 
         search = NSSearchField()
-        search.placeholderString = "Rechercher dans l'historique"
+        search.placeholderString = L("panel.searchPlaceholder")
         search.delegate = self
         search.focusRingType = .none
 
@@ -544,7 +599,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         scroll.autohidesScrollers = true
         scroll.drawsBackground = false
 
-        let footer = NSTextField(labelWithString: "↩ Coller   ⌥↩ Texte brut   ⌘1–9 Accès direct   ⌘⌫ Supprimer   Échap Fermer")
+        let footer = NSTextField(labelWithString: L("panel.footer"))
         footer.font = .systemFont(ofSize: 10)
         footer.textColor = .secondaryLabelColor
         footer.alignment = .center

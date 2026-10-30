@@ -53,14 +53,16 @@ Recopier un contenu déjà présent le remonte en tête au lieu de créer un dou
 
 ## Menu de l'icône
 
-- **Mettre la capture en pause** : la pause est conservée après un redémarrage.
+L'interface est en français ou en anglais selon la langue de macOS (la première des langues préférées).
+
+- **Suspendre la capture** : la pause est conservée après un redémarrage.
 - **Coller automatiquement** : désactivé, l'élément choisi est seulement remis dans le
   presse-papiers et tu fais ⌘V toi-même. Il n'y a alors pas besoin de l'autorisation Accessibilité.
 - **Ouvrir à la connexion**
-- **Ne plus capturer depuis « App »** : exclut l'app au premier plan.
-- **Apps exclues** : clique sur une app pour la réautoriser.
+- **Ignorer les copies depuis « App »** : exclut l'app au premier plan.
+- **Apps ignorées** : clique sur une app pour ne plus l'ignorer.
 - **Vider l'historique et le presse-papiers**
-- **Quitter**
+- **Quitter ClipHistory**
 
 ## Confidentialité
 
@@ -108,7 +110,7 @@ ni lancer l'app, et sans toucher à ton presse-papiers. Chaque test s'affiche av
 
 ## Désinstaller
 
-1. Menu de l'icône > Quitter (et décocher « Ouvrir à la connexion » au préalable)
+1. Menu de l'icône > Quitter ClipHistory (et décocher « Ouvrir à la connexion » au préalable)
 2. `rm -rf /Applications/ClipHistory.app`
 3. Facultatif : `defaults delete local.cliphistory` pour effacer les réglages
 4. Retirer ClipHistory de la liste Accessibilité
