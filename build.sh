@@ -77,18 +77,58 @@ EOF
 
 codesign --force --sign - "build/$APP"
 
-# Copie d'abord à côté, puis remplace : une copie ratée ne supprime pas la version installée.
+# Vérifications avant de toucher à quoi que ce soit : rien n'est encore copié ni arrêté.
+# Remplacer l'app demande d'écrire dans $DEST, et supprimer un dossier demande d'écrire dans
+# chacun de ses sous-dossiers. Ex. : une app installée une fois avec sudo appartient à root ;
+# sans ce contrôle, l'app serait arrêtée puis « mv » échouerait, laissant l'utilisateur sans app.
 mkdir -p "$DEST"
+if [ ! -w "$DEST" ]; then
+  echo "Impossible d'écrire dans $DEST : rien n'a été modifié." >&2
+  exit 1
+fi
+# Affiche le premier dossier non modifiable sous $1 (rien si tout est modifiable ou si $1 n'existe pas).
+first_locked_dir() {
+  if [ ! -d "$1" ]; then return 0; fi
+  while IFS= read -r dir; do
+    if [ ! -w "$dir" ]; then
+      echo "$dir"
+      return 0
+    fi
+  done < <(find "$1" -type d)
+}
+# Les restes .new/.old d'une installation précédente sont aussi supprimés plus bas.
+for target in "$DEST/$APP" "$DEST/.$APP.new" "$DEST/.$APP.old"; do
+  locked="$(first_locked_dir "$target")"
+  if [ -n "$locked" ]; then
+    echo "Impossible de remplacer $target : $locked n'est pas modifiable (installé avec sudo ?)." >&2
+    echo "Rien n'a été modifié, l'app n'a pas été arrêtée. Pour corriger :" >&2
+    echo "  sudo chown -R \"\$(id -un)\" \"$target\"" >&2
+    exit 1
+  fi
+done
+
+# Copie d'abord à côté, puis remplace : une copie ratée ne supprime pas la version installée.
 rm -rf "$DEST/.$APP.new"
 cp -R "build/$APP" "$DEST/.$APP.new"
+# pkill et pgrep limités à l'utilisateur courant : sur un Mac à plusieurs comptes, pgrep verrait
+# la ClipHistory d'un autre compte, que pkill ne peut pas arrêter (attente inutile, faux diagnostic).
+ME="$(id -u)"
 # Quitte toute copie en cours, y compris l'ancienne copie de ~/Applications.
-pkill -x ClipHistory 2>/dev/null || true
+pkill -u "$ME" -x ClipHistory 2>/dev/null || true
 # pkill ne fait que demander à l'app de quitter : sans attendre sa fin, « open » peut
 # tomber sur le processus en train de s'arrêter et échouer (erreur -600). Attente max 5 s.
 for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
-  pgrep -x ClipHistory >/dev/null || break
+  pgrep -u "$ME" -x ClipHistory >/dev/null || break
   sleep 0.25
 done
+# Toujours vivante après 5 s : on s'arrête là. Sinon le contrôle de démarrage plus bas
+# trouverait l'ANCIEN processus, conclurait « Installé » et supprimerait la version précédente.
+if pgrep -u "$ME" -x ClipHistory >/dev/null; then
+  rm -rf "$DEST/.$APP.new"
+  echo "ClipHistory ne s'est pas arrêtée en 5 s : rien n'a été remplacé." >&2
+  echo "Quitte-la (menu de l'icône > Quitter, ou Moniteur d'activité) puis relance bash build.sh." >&2
+  exit 1
+fi
 rm -rf "$DEST/.$APP.old"
 if [ -d "$DEST/$APP" ]; then mv "$DEST/$APP" "$DEST/.$APP.old"; fi
 restore_old() {
@@ -110,9 +150,19 @@ fi
 # Le « ^ » ancre le chemin au début de la ligne de commande : sans lui,
 # « /Applications/ClipHistory.app/… » correspondrait aussi à
 # « /Users/moi/Applications/ClipHistory.app/… » (l'ancienne copie).
+# Attente du démarrage, max 10 s : un délai fixe prendrait un démarrage lent (ex. 3 s après
+# une recompilation) pour un échec, et supprimerait la nouvelle version en plein lancement.
+# L'ancienne version est arrêtée (vérifié plus haut) : un processus trouvé ici est le nouveau.
 open "$DEST/$APP" || true
-sleep 2
-if pgrep -f "^$DEST/$APP/Contents/MacOS/ClipHistory" >/dev/null; then
+started="no"
+for _ in $(seq 1 40); do
+  if pgrep -u "$ME" -f "^$DEST/$APP/Contents/MacOS/ClipHistory" >/dev/null; then
+    started="yes"
+    break
+  fi
+  sleep 0.25
+done
+if [ "$started" = "yes" ]; then
   rm -rf "$DEST/.$APP.old"
   echo "Installé : $DEST/$APP"
 else

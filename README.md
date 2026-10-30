@@ -21,6 +21,8 @@ bash build.sh
 Le script compile l'app, la signe en local (signature *ad hoc*), l'installe dans
 `/Applications/ClipHistory.app` et la lance. Si la nouvelle version ne démarre pas,
 l'ancienne est remise en place. Pas besoin de `sudo` si ton compte est administrateur.
+Si l'app installée n'est pas modifiable (par exemple installée une fois avec `sudo`) ou ne
+se ferme pas, le script s'arrête avec un message, sans rien remplacer.
 
 > Les anciennes versions du script installaient l'app dans `~/Applications`. S'il trouve
 > cette ancienne copie, le script la supprime une fois la nouvelle lancée (elle pourrait
