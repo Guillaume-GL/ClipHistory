@@ -11,15 +11,31 @@ DEST="/Applications"
 OLD_DEST="$HOME/Applications"
 ARCH="$(uname -m)"
 
-MODE="${1:-install}"
+usage_error() {
+  echo "$1" >&2
+  echo "Usage : bash build.sh [test]" >&2
+  exit 2
+}
+
+# Le mode se déduit du NOMBRE d'arguments, pas de leur valeur : avec « ${1:-install} »,
+# « bash build.sh "" » (ex. une variable vide) lançait une installation complète.
+#   (aucun)        → install
+#   test           → test
+#   "" / foo       → erreur, rien n'est compilé
+#   test extra     → erreur (un argument en trop n'est pas ignoré en silence)
+if [ "$#" -gt 1 ]; then
+  usage_error "Trop d'arguments : $*"
+fi
+if [ "$#" -eq 0 ]; then
+  MODE="install"
+else
+  MODE="$1"
+fi
 case "$MODE" in
   install|test) ;;
-  *)
-    # Un argument inconnu (ex. « tests ») ne doit pas déclencher l'installation par défaut.
-    echo "Argument inconnu : $MODE" >&2
-    echo "Usage : bash build.sh [test]" >&2
-    exit 2
-    ;;
+  "") usage_error "Argument vide." ;;
+  # Un argument inconnu (ex. « tests ») ne doit pas déclencher l'installation par défaut.
+  *) usage_error "Argument inconnu : $MODE" ;;
 esac
 
 if [ "$MODE" = "test" ]; then

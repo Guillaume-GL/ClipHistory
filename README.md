@@ -110,9 +110,14 @@ Puis relance `bash build.sh`.
 bash build.sh test
 ```
 
-Compile `main.swift` avec `Tests.swift` et lance les tests de l'historique, sans installer
-ni lancer l'app, et sans toucher à ton presse-papiers. Chaque test s'affiche avec `PASS` ou
-`FAIL` ; le code de retour est 0 si tout passe, différent de 0 sinon.
+Compile `main.swift` avec `Tests.swift` et lance les tests (historique, langue français /
+anglais, icône de l'app et icône de la barre des menus), sans installer ni lancer l'app, et
+sans toucher à ton presse-papiers. Chaque test s'affiche avec `PASS` ou `FAIL` ; le code de
+retour est 0 si tout passe, différent de 0 sinon.
+
+Tout autre argument que `test` (y compris un argument vide `""` ou un argument en trop, ex.
+`bash build.sh test extra`) affiche l'usage et s'arrête avec le code 2, sans rien compiler
+ni installer.
 
 ## Désinstaller
 
