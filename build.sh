@@ -1,7 +1,8 @@
 #!/bin/bash
 # Compile ClipHistory.app avec les outils en ligne de commande d'Apple et l'installe dans /Applications.
-#   bash build.sh        compile, installe et lance l'app
-#   bash build.sh test   compile et lance les tests (Tests.swift), sans installer ni lancer l'app
+#   bash build.sh           compile, installe et lance l'app
+#   bash build.sh install   identique à « bash build.sh » (forme explicite)
+#   bash build.sh test      compile et lance les tests (Tests.swift), sans installer ni lancer l'app
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -13,13 +14,14 @@ ARCH="$(uname -m)"
 
 usage_error() {
   echo "$1" >&2
-  echo "Usage : bash build.sh [test]" >&2
+  echo "Usage : bash build.sh [install|test]" >&2
   exit 2
 }
 
 # Le mode se déduit du NOMBRE d'arguments, pas de leur valeur : avec « ${1:-install} »,
 # « bash build.sh "" » (ex. une variable vide) lançait une installation complète.
 #   (aucun)        → install
+#   install        → install
 #   test           → test
 #   "" / foo       → erreur, rien n'est compilé
 #   test extra     → erreur (un argument en trop n'est pas ignoré en silence)
@@ -100,6 +102,7 @@ codesign --force --sign - "build/$APP"
 mkdir -p "$DEST"
 if [ ! -w "$DEST" ]; then
   echo "Impossible d'écrire dans $DEST : rien n'a été modifié." >&2
+  echo "Compte non administrateur ? Installe depuis un compte administrateur." >&2
   exit 1
 fi
 # Affiche le premier dossier non modifiable sous $1 (rien si tout est modifiable ou si $1 n'existe pas).
@@ -112,8 +115,10 @@ first_locked_dir() {
     fi
   done < <(find "$1" -type d)
 }
-# Les restes .new/.old d'une installation précédente sont aussi supprimés plus bas.
-for target in "$DEST/$APP" "$DEST/.$APP.new" "$DEST/.$APP.old"; do
+# Les restes .new/.old d'une installation précédente sont aussi supprimés plus bas, tout comme
+# l'ancienne copie de ~/Applications (tout à la fin). Ex. : sans ce contrôle, une ancienne copie
+# non supprimable faisait échouer « rm -rf » APRÈS le message « Installé », avec le code 1.
+for target in "$DEST/$APP" "$DEST/.$APP.new" "$DEST/.$APP.old" "$OLD_DEST/$APP"; do
   locked="$(first_locked_dir "$target")"
   if [ -n "$locked" ]; then
     echo "Impossible de remplacer $target : $locked n'est pas modifiable (installé avec sudo ?)." >&2
@@ -178,6 +183,16 @@ for _ in $(seq 1 40); do
   fi
   sleep 0.25
 done
+# Être apparue une fois ne suffit pas : on vérifie qu'elle tourne TOUJOURS 2 s plus tard.
+# Ex. : une version qui plante 0,5 s après son lancement est vue par la boucle ci-dessus ;
+# sans ce second contrôle, elle serait déclarée « Installé » et l'ancienne version supprimée
+# (plus d'app qui marche, plus de retour arrière possible).
+if [ "$started" = "yes" ]; then
+  sleep 2
+  if ! pgrep -u "$ME" -f "^$DEST/$APP/Contents/MacOS/ClipHistory" >/dev/null; then
+    started="no"
+  fi
+fi
 if [ "$started" = "yes" ]; then
   rm -rf "$DEST/.$APP.old"
   echo "Installé : $DEST/$APP"

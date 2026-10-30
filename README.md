@@ -19,8 +19,8 @@ bash build.sh
 ```
 
 Le script compile l'app, la signe en local (signature *ad hoc*), l'installe dans
-`/Applications/ClipHistory.app` et la lance. Si la nouvelle version ne démarre pas,
-l'ancienne est remise en place. Pas besoin de `sudo` si ton compte est administrateur.
+`/Applications/ClipHistory.app` et la lance. Si la nouvelle version ne démarre pas (ou
+s'arrête dans les 2 secondes qui suivent son lancement), l'ancienne est remise en place. Pas besoin de `sudo` si ton compte est administrateur.
 Si l'app installée n'est pas modifiable (par exemple installée une fois avec `sudo`) ou ne
 se ferme pas, le script s'arrête avec un message, sans rien remplacer.
 
@@ -115,7 +115,8 @@ anglais, icône de l'app et icône de la barre des menus), sans installer ni lan
 sans toucher à ton presse-papiers. Chaque test s'affiche avec `PASS` ou `FAIL` ; le code de
 retour est 0 si tout passe, différent de 0 sinon.
 
-Tout autre argument que `test` (y compris un argument vide `""` ou un argument en trop, ex.
+`bash build.sh install` est accepté et fait la même chose que `bash build.sh`. Tout autre
+argument que `test` ou `install` (y compris un argument vide `""` ou un argument en trop, ex.
 `bash build.sh test extra`) affiche l'usage et s'arrête avec le code 2, sans rien compiler
 ni installer.
 
