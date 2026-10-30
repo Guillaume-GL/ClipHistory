@@ -117,6 +117,100 @@ func testSearchIgnoresCaseAndAccents(_ t: TestContext) {
     t.expectEqual(resultTexts, ["Été à Paris"], "search results for \"ete\"")
 }
 
+// MARK: - Localization tests (strings / localized in main.swift)
+
+/// The key every localization test relies on (agreed with the user: the "Show history" menu entry).
+let showHistoryKey = "menu.showHistory"
+
+/// French and English texts of the "Show history" entry, read from the table so the tests
+/// do not depend on the exact wording. Records a failure and returns nil if the key is missing.
+func showHistoryTexts(_ t: TestContext) -> (fr: String, en: String)? {
+    guard let entry = strings[showHistoryKey] else {
+        t.expectTrue(false, "strings has no entry for \"\(showHistoryKey)\"")
+        return nil
+    }
+    // If both texts were identical, "returns French" and "returns English" could not be
+    // told apart and the language tests below would pass for the wrong reason.
+    t.expectTrue(entry.fr != entry.en, "French and English texts of \"\(showHistoryKey)\" differ")
+    return entry
+}
+
+/// Localization criterion 1: a first preferred language starting with "fr" gives French.
+/// "fr-FR" and "fr-CA" are the forms Locale.preferredLanguages returns for regional French.
+func testLocalizedReturnsFrenchWhenFirstLanguageIsFrench(_ t: TestContext) {
+    guard let expected = showHistoryTexts(t) else { return }
+
+    for language in ["fr", "fr-FR", "fr-CA"] {
+        let text = localized(showHistoryKey, languages: [language])
+        t.expectEqual(text, expected.fr, "localized text for languages [\(language)]")
+    }
+}
+
+/// Localization criterion 1: any other first language, or no language at all, gives English.
+func testLocalizedReturnsEnglishForOtherOrNoLanguage(_ t: TestContext) {
+    guard let expected = showHistoryTexts(t) else { return }
+
+    let languageLists: [[String]] = [["en"], ["de"], ["ja"], []]
+    for languages in languageLists {
+        let text = localized(showHistoryKey, languages: languages)
+        t.expectEqual(text, expected.en, "localized text for languages \(languages)")
+    }
+}
+
+/// Localization criterion 1 (rule detail): only the FIRST preferred language matters.
+/// ["en", "fr"] -> English, even though French is in the list.
+/// ["fr", "en"] -> French, so the rule is not simply "always English when there are several".
+func testLocalizedOnlyLooksAtFirstPreferredLanguage(_ t: TestContext) {
+    guard let expected = showHistoryTexts(t) else { return }
+
+    let englishFirst = localized(showHistoryKey, languages: ["en", "fr"])
+    t.expectEqual(englishFirst, expected.en, "localized text for languages [en, fr]")
+
+    let germanFirst = localized(showHistoryKey, languages: ["de", "fr-FR"])
+    t.expectEqual(germanFirst, expected.en, "localized text for languages [de, fr-FR]")
+
+    let frenchFirst = localized(showHistoryKey, languages: ["fr", "en"])
+    t.expectEqual(frenchFirst, expected.fr, "localized text for languages [fr, en]")
+}
+
+/// Localization criterion 2: every key has a non-empty French text and a non-empty English text.
+/// Keys are sorted so failures are reported in a stable order.
+func testEveryStringHasFrenchAndEnglishText(_ t: TestContext) {
+    t.expectTrue(!strings.isEmpty, "strings table is not empty")
+
+    for key in strings.keys.sorted() {
+        let entry = strings[key]!
+        t.expectTrue(!entry.fr.isEmpty, "French text of \"\(key)\" is not empty")
+        t.expectTrue(!entry.en.isEmpty, "English text of \"\(key)\" is not empty")
+    }
+}
+
+/// Localization criterion 3: the "Show history" entry shows the current shortcut
+/// (hotKeyLabel, e.g. "⌃⌘V") in both languages, so changing the shortcut updates the menu.
+func testShowHistoryEntryContainsHotKeyLabel(_ t: TestContext) {
+    guard let entry = strings[showHistoryKey] else {
+        t.expectTrue(false, "strings has no entry for \"\(showHistoryKey)\"")
+        return
+    }
+
+    t.expectTrue(entry.fr.contains(hotKeyLabel),
+                 "French text \"\(entry.fr)\" contains hotKeyLabel \"\(hotKeyLabel)\"")
+    t.expectTrue(entry.en.contains(hotKeyLabel),
+                 "English text \"\(entry.en)\" contains hotKeyLabel \"\(hotKeyLabel)\"")
+}
+
+/// Localization: an unknown key (e.g. a typo like "menu.qiut") returns the key itself,
+/// so the mistake shows up in the menu instead of an empty item or a crash.
+func testUnknownKeyReturnsTheKeyItself(_ t: TestContext) {
+    let missingKey = "missing.key"
+
+    let frenchText = localized(missingKey, languages: ["fr"])
+    t.expectEqual(frenchText, missingKey, "localized text for an unknown key, languages [fr]")
+
+    let englishText = localized(missingKey, languages: ["en"])
+    t.expectEqual(englishText, missingKey, "localized text for an unknown key, languages [en]")
+}
+
 // MARK: - Runner
 
 /// Runs every test, prints each name with PASS/FAIL and failure details,
@@ -126,6 +220,12 @@ func runTests() {
         ("testCopyingSameTextAgainMovesItToTopWithoutDuplicate", testCopyingSameTextAgainMovesItToTopWithoutDuplicate),
         ("testConcealedCopyIsNotRecorded", testConcealedCopyIsNotRecorded),
         ("testSearchIgnoresCaseAndAccents", testSearchIgnoresCaseAndAccents),
+        ("testLocalizedReturnsFrenchWhenFirstLanguageIsFrench", testLocalizedReturnsFrenchWhenFirstLanguageIsFrench),
+        ("testLocalizedReturnsEnglishForOtherOrNoLanguage", testLocalizedReturnsEnglishForOtherOrNoLanguage),
+        ("testLocalizedOnlyLooksAtFirstPreferredLanguage", testLocalizedOnlyLooksAtFirstPreferredLanguage),
+        ("testEveryStringHasFrenchAndEnglishText", testEveryStringHasFrenchAndEnglishText),
+        ("testShowHistoryEntryContainsHotKeyLabel", testShowHistoryEntryContainsHotKeyLabel),
+        ("testUnknownKeyReturnsTheKeyItself", testUnknownKeyReturnsTheKeyItself),
     ]
 
     // Criterion 1: the tests must not touch the user's clipboard.
