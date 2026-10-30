@@ -96,6 +96,9 @@ En haut de `main.swift` :
 - `maxMemoryBytes` : le plafond mémoire
 - `defaultExcludedApps` : les apps exclues par défaut (identifiants de bundle)
 
+L'icône de l'app est dessinée en code dans `main.swift` (section « Icône de l'app ») :
+couleurs du fond dans `appIconTopColor` / `appIconBottomColor`.
+
 Puis relance `bash build.sh`.
 
 ## Tests

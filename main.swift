@@ -763,14 +763,211 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 }
 
+// MARK: - Icône de l'app (dessinée en code, convertie en .icns par build.sh)
+
+// Tout est dessiné sur un canevas de 1024 × 1024, axe y vers le haut, puis mis à l'échelle.
+// Pour changer les couleurs du fond, modifier ces deux constantes.
+let appIconTopColor = NSColor(calibratedRed: 0.55, green: 0.88, blue: 0.72, alpha: 1)     // vert menthe clair
+let appIconBottomColor = NSColor(calibratedRed: 0.16, green: 0.62, blue: 0.50, alpha: 1)  // vert menthe foncé
+let appIconCanvas: CGFloat = 1024
+
+/// Dessine l'icône à exactement `pixels` × `pixels` pixels.
+/// On dessine dans un NSBitmapImageRep et pas via NSImage.lockFocus : lockFocus suit l'écran,
+/// donc sur un écran Retina une demande de 16 donne 32 pixels, et iconutil range mal le PNG.
+func renderAppIcon(pixels: Int) -> NSBitmapImageRep {
+    let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: pixels, pixelsHigh: pixels,
+                               bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                               colorSpaceName: .calibratedRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+    // Taille en points = taille en pixels (72 dpi) : iconutil classe chaque PNG par cette taille.
+    rep.size = NSSize(width: pixels, height: pixels)
+
+    let graphics = NSGraphicsContext(bitmapImageRep: rep)!
+    let ctx = graphics.cgContext
+    // Fond transparent garanti : les coins hors du carré arrondi doivent rester vides.
+    ctx.clear(CGRect(x: 0, y: 0, width: pixels, height: pixels))
+    let scale = CGFloat(pixels) / appIconCanvas
+    ctx.scaleBy(x: scale, y: scale)
+
+    // NSColor.cgColor et les dessins AppKit utilisent le contexte courant : on le fixe le temps du dessin.
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = graphics
+    drawAppIconBackground(ctx)
+    drawAppIconCharacter(ctx)
+    NSGraphicsContext.restoreGraphicsState()
+    return rep
+}
+
+/// Carré arrondi façon macOS, en retrait de 100 sur chaque bord (les icônes macOS ont une marge),
+/// avec un dégradé vertical du clair (haut) au foncé (bas).
+func drawAppIconBackground(_ ctx: CGContext) {
+    let inset: CGFloat = 100
+    let cornerRadius: CGFloat = 185
+    let squareRect = CGRect(x: inset, y: inset,
+                            width: appIconCanvas - 2 * inset, height: appIconCanvas - 2 * inset)
+    let squarePath = CGPath(roundedRect: squareRect, cornerWidth: cornerRadius,
+                            cornerHeight: cornerRadius, transform: nil)
+    let colors = [appIconTopColor.cgColor, appIconBottomColor.cgColor] as CFArray
+    let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 1])!
+    let top = CGPoint(x: appIconCanvas / 2, y: squareRect.maxY)
+    let bottom = CGPoint(x: appIconCanvas / 2, y: squareRect.minY)
+
+    ctx.saveGState()
+    ctx.addPath(squarePath)
+    ctx.clip()
+    ctx.drawLinearGradient(gradient, start: top, end: bottom, options: [])
+    ctx.restoreGState()
+}
+
+/// Le trombone et son visage, légèrement penchés. Les coordonnées des parties sont celles
+/// du trombone droit ; la rotation est appliquée une seule fois ici pour tout le personnage.
+func drawAppIconCharacter(_ ctx: CGContext) {
+    let tiltAngle: CGFloat = -0.18   // radians, environ 10° dans le sens horaire
+    ctx.saveGState()
+    // Tourne autour du centre du canevas, puis recale le trombone (centré vers 530, 500) au milieu.
+    ctx.translateBy(x: 512, y: 512)
+    ctx.rotate(by: tiltAngle)
+    ctx.translateBy(x: -530, y: -500)
+    drawAppIconClip(ctx)
+    drawAppIconEyes(ctx)
+    drawAppIconBrows(ctx)
+    drawAppIconSmile(ctx)
+    ctx.restoreGState()
+}
+
+/// Le fil du trombone : un seul tracé, de l'extrémité de la branche intérieure
+/// à celle de la branche extérieure, en passant par les trois boucles.
+func drawAppIconClip(_ ctx: CGContext) {
+    let clip = CGMutablePath()
+    clip.move(to: CGPoint(x: 480, y: 620))                                   // bout de la branche intérieure
+    clip.addLine(to: CGPoint(x: 480, y: 380))
+    clip.addArc(center: CGPoint(x: 535, y: 380), radius: 55,
+                startAngle: .pi, endAngle: 2 * .pi, clockwise: false)        // petite boucle du bas
+    clip.addLine(to: CGPoint(x: 590, y: 720))
+    clip.addArc(center: CGPoint(x: 495, y: 720), radius: 95,
+                startAngle: 0, endAngle: .pi, clockwise: false)              // boucle du haut
+    clip.addLine(to: CGPoint(x: 400, y: 300))
+    clip.addArc(center: CGPoint(x: 530, y: 300), radius: 130,
+                startAngle: .pi, endAngle: 2 * .pi, clockwise: false)        // grande boucle du bas
+    clip.addLine(to: CGPoint(x: 660, y: 580))                                // bout de la branche extérieure
+
+    ctx.setLineCap(.round)
+    ctx.setLineJoin(.round)
+    // Trois passes sur le même tracé, de la plus large à la plus fine : contour sombre (44),
+    // corps argenté (34), puis un reflet fin décalé vers le haut à gauche. Ça se lit comme du métal.
+    ctx.addPath(clip)
+    ctx.setLineWidth(44)
+    ctx.setStrokeColor(NSColor(calibratedWhite: 0.25, alpha: 1).cgColor)
+    ctx.strokePath()
+
+    ctx.addPath(clip)
+    ctx.setLineWidth(34)
+    ctx.setStrokeColor(NSColor(calibratedWhite: 0.80, alpha: 1).cgColor)
+    ctx.strokePath()
+
+    let highlightOffset = CGSize(width: -5, height: 5)
+    ctx.saveGState()
+    ctx.translateBy(x: highlightOffset.width, y: highlightOffset.height)
+    ctx.addPath(clip)
+    ctx.setLineWidth(9)
+    ctx.setStrokeColor(NSColor(calibratedWhite: 1.0, alpha: 0.9).cgColor)
+    ctx.strokePath()
+    ctx.restoreGState()
+}
+
+/// Deux yeux globuleux sur le haut du trombone, pupilles tournées vers le haut à droite.
+func drawAppIconEyes(_ ctx: CGContext) {
+    let leftEyeCenter = CGPoint(x: 445, y: 640)
+    let rightEyeCenter = CGPoint(x: 560, y: 650)   // un peu plus haut : suit la pente du trombone
+    let pupilOffset = CGPoint(x: 14, y: 10)
+    drawAppIconEye(ctx, center: leftEyeCenter, pupilOffset: pupilOffset)
+    drawAppIconEye(ctx, center: rightEyeCenter, pupilOffset: pupilOffset)
+}
+
+/// Un œil : blanc ovale cerclé de sombre, pupille noire, petit reflet blanc dans la pupille.
+func drawAppIconEye(_ ctx: CGContext, center: CGPoint, pupilOffset: CGPoint) {
+    let whiteRect = CGRect(x: center.x - 48, y: center.y - 58, width: 96, height: 116)
+    ctx.setFillColor(NSColor.white.cgColor)
+    ctx.fillEllipse(in: whiteRect)
+    ctx.setStrokeColor(NSColor(calibratedWhite: 0.15, alpha: 1).cgColor)
+    ctx.setLineWidth(8)
+    ctx.strokeEllipse(in: whiteRect)
+
+    let pupil = CGPoint(x: center.x + pupilOffset.x, y: center.y + pupilOffset.y)
+    ctx.setFillColor(NSColor(calibratedWhite: 0.08, alpha: 1).cgColor)
+    ctx.fillEllipse(in: CGRect(x: pupil.x - 24, y: pupil.y - 28, width: 48, height: 56))
+    ctx.setFillColor(NSColor.white.cgColor)
+    ctx.fillEllipse(in: CGRect(x: pupil.x - 4, y: pupil.y + 8, width: 14, height: 14))
+}
+
+/// Sourcils : le droit plus haut et plus arqué que le gauche, pour un air curieux.
+func drawAppIconBrows(_ ctx: CGContext) {
+    let leftBrow = CGMutablePath()
+    leftBrow.move(to: CGPoint(x: 400, y: 722))
+    leftBrow.addQuadCurve(to: CGPoint(x: 485, y: 728), control: CGPoint(x: 440, y: 748))
+    let rightBrow = CGMutablePath()
+    rightBrow.move(to: CGPoint(x: 520, y: 752))
+    rightBrow.addQuadCurve(to: CGPoint(x: 605, y: 770), control: CGPoint(x: 565, y: 800))
+
+    ctx.setStrokeColor(NSColor(calibratedWhite: 0.12, alpha: 1).cgColor)
+    ctx.setLineWidth(16)
+    ctx.addPath(leftBrow)
+    ctx.strokePath()
+    ctx.addPath(rightBrow)
+    ctx.strokePath()
+}
+
+/// Petit sourire entre les deux branches. Le point de contrôle est plus bas que les extrémités
+/// (505 contre 545-550), ce qui creuse la courbe vers le bas : un sourire, pas une moue.
+func drawAppIconSmile(_ ctx: CGContext) {
+    let smile = CGMutablePath()
+    smile.move(to: CGPoint(x: 470, y: 545))
+    smile.addQuadCurve(to: CGPoint(x: 560, y: 550), control: CGPoint(x: 512, y: 505))
+    ctx.setStrokeColor(NSColor(calibratedWhite: 0.12, alpha: 1).cgColor)
+    ctx.setLineWidth(12)
+    ctx.addPath(smile)
+    ctx.strokePath()
+}
+
+/// Fichiers d'un .iconset : nom attendu par iconutil → taille en pixels.
+/// Ex. « icon_16x16@2x.png » = icône de 16 points pour écran Retina, donc 32 pixels.
+let appIconSetFiles: [(name: String, pixels: Int)] = [
+    ("icon_16x16.png", 16), ("icon_16x16@2x.png", 32),
+    ("icon_32x32.png", 32), ("icon_32x32@2x.png", 64),
+    ("icon_128x128.png", 128), ("icon_128x128@2x.png", 256),
+    ("icon_256x256.png", 256), ("icon_256x256@2x.png", 512),
+    ("icon_512x512.png", 512), ("icon_512x512@2x.png", 1024),
+]
+
+/// Écrit les PNG de l'icône dans le dossier `directory` (créé au besoin), pour iconutil.
+/// Appelée par build.sh via un binaire compilé avec -D MAKE_ICON. Quitte avec 1 en cas d'erreur.
+func writeAppIconSet(to directory: String) {
+    let folder = URL(fileURLWithPath: directory)
+    do {
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        for file in appIconSetFiles {
+            let rep = renderAppIcon(pixels: file.pixels)
+            guard let png = rep.representation(using: .png, properties: [:]) else {
+                throw CocoaError(.fileWriteUnknown)
+            }
+            try png.write(to: folder.appendingPathComponent(file.name))
+        }
+    } catch {
+        FileHandle.standardError.write("Échec de l'écriture de l'icône : \(error)\n".data(using: .utf8)!)
+        exit(1)
+    }
+}
+
 // MARK: - Lancement
 
 let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate
 app.setActivationPolicy(.accessory)
+// Compilé avec -D MAKE_ICON (par build.sh) : écrit les PNG de l'icône dans le dossier passé en argument.
 // Compilé avec -D TESTING (bash build.sh test) : lance les tests de Tests.swift au lieu de l'app.
-#if TESTING
+#if MAKE_ICON
+writeAppIconSet(to: CommandLine.arguments[1])
+#elseif TESTING
 runTests()
 #else
 app.run()

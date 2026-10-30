@@ -46,6 +46,17 @@ xcrun --sdk macosx swiftc -O -swift-version 5 \
   -target "$ARCH-apple-macos13" \
   main.swift -o "build/$APP/Contents/MacOS/ClipHistory"
 
+# Icône : l'icône est dessinée en code (renderAppIcon dans main.swift). Un petit binaire compilé
+# avec -D MAKE_ICON écrit les PNG du .iconset, puis iconutil les assemble en .icns.
+echo "Génération de l'icône…"
+mkdir -p "build/$APP/Contents/Resources"
+xcrun --sdk macosx swiftc -O -swift-version 5 \
+  -target "$ARCH-apple-macos13" \
+  -D MAKE_ICON \
+  main.swift -o build/MakeAppIcon
+./build/MakeAppIcon build/AppIcon.iconset
+iconutil -c icns build/AppIcon.iconset -o "build/$APP/Contents/Resources/AppIcon.icns"
+
 cat > "build/$APP/Contents/Info.plist" <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -54,6 +65,7 @@ cat > "build/$APP/Contents/Info.plist" <<'EOF'
   <key>CFBundleIdentifier</key><string>local.cliphistory</string>
   <key>CFBundleName</key><string>ClipHistory</string>
   <key>CFBundleExecutable</key><string>ClipHistory</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>1.0</string>
   <key>CFBundleVersion</key><string>1</string>
