@@ -211,6 +211,33 @@ func testUnknownKeyReturnsTheKeyItself(_ t: TestContext) {
     t.expectEqual(englishText, missingKey, "localized text for an unknown key, languages [en]")
 }
 
+/// Bug fix: the detail text of the "alert.oldStorage" alert was hard-coded in French.
+/// It now comes from "alert.oldStorage.info", filled with the folder path via String(format:).
+/// Exactly one "%" per text, and it is "%@": a second "%@" or a "%d" would make
+/// String(format:) read an argument that was never passed (garbage text or crash).
+/// e.g. "Couldn't delete the folder %@." passes; "%@ … %@" or "%d" fails.
+func testOldStorageInfoIsLocalizedAndTakesTheFolderPath(_ t: TestContext) {
+    let key = "alert.oldStorage.info"
+    guard let entry = strings[key] else {
+        t.expectTrue(false, "strings has no entry for \"\(key)\"")
+        return
+    }
+
+    for (language, text) in [("French", entry.fr), ("English", entry.en)] {
+        let percentCount = text.components(separatedBy: "%").count - 1
+        let placeholderCount = text.components(separatedBy: "%@").count - 1
+        t.expectEqual(placeholderCount, 1, "number of %@ in the \(language) text \"\(text)\"")
+        t.expectEqual(percentCount, 1, "number of % in the \(language) text \"\(text)\"")
+    }
+
+    let samplePath = "/tmp/X"
+    let french = String(format: localized(key, languages: ["fr"]), samplePath)
+    let english = String(format: localized(key, languages: ["en"]), samplePath)
+    t.expectTrue(french.contains(samplePath), "French text \"\(french)\" contains \"\(samplePath)\"")
+    t.expectTrue(english.contains(samplePath), "English text \"\(english)\" contains \"\(samplePath)\"")
+    t.expectTrue(french != english, "French and English texts differ (\"\(french)\")")
+}
+
 // MARK: - App icon tests (renderAppIcon in main.swift)
 
 /// The pixel sizes iconutil needs for an .icns (16, 32, 128, 256, 512 at 1x and 2x).
@@ -307,6 +334,7 @@ func runTests() {
         ("testEveryStringHasFrenchAndEnglishText", testEveryStringHasFrenchAndEnglishText),
         ("testShowHistoryEntryContainsHotKeyLabel", testShowHistoryEntryContainsHotKeyLabel),
         ("testUnknownKeyReturnsTheKeyItself", testUnknownKeyReturnsTheKeyItself),
+        ("testOldStorageInfoIsLocalizedAndTakesTheFolderPath", testOldStorageInfoIsLocalizedAndTakesTheFolderPath),
         ("testAppIconHasExactPixelSizeAtEverySize", testAppIconHasExactPixelSizeAtEverySize),
         ("testAppIconHasOpaquePixelsAtEverySize", testAppIconHasOpaquePixelsAtEverySize),
         ("testAppIconCornersAreTransparentAtEverySize", testAppIconCornersAreTransparentAtEverySize),
