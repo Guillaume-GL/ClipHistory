@@ -73,6 +73,8 @@ let strings: [String: (fr: String, en: String)] = [
                           en: "Couldn't change Open at Login."),
     "alert.oldStorage": (fr: "Ancien historique encore présent sur le disque.",
                          en: "Old history still on disk."),
+    "alert.oldStorage.info": (fr: "Le dossier %@ n'a pas pu être effacé.",
+                              en: "Couldn't delete the folder %@."),
 ]
 
 /// Texte de `key` dans la langue choisie d'après `languages` (langues préférées, la première d'abord).
@@ -257,7 +259,12 @@ func removeOldStorage() -> String? {
         try fm.removeItem(at: old)
         return nil
     } catch {
-        return "L'ancien dossier \(old.path) n'a pas pu être effacé : \(error.localizedDescription)"
+        // Notre phrase suit la langue de l'app (L), la cause vient de macOS, déjà traduite.
+        // Ex. (Mac en anglais) : "Couldn't delete the folder /Users/moi/Library/Application Support/ClipHistoryApp.\n
+        //   You don't have permission to access “ClipHistoryApp”."
+        let sentence = String(format: L("alert.oldStorage.info"), old.path)
+        let systemReason = error.localizedDescription
+        return sentence + "\n" + systemReason
     }
 }
 
