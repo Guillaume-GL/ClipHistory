@@ -936,8 +936,11 @@ func drawAppIconInkWire(_ ctx: CGContext, wire: [CGPoint], random: inout AppIcon
 }
 
 /// Reflet : un trait de pinceau blanc et fin posé sur le fil, décalé vers le haut à gauche.
+/// floor 0.5 (pas plus) : pas de disque aux bouts, le reflet s'affine et s'arrête à l'intérieur du fil.
+/// Avec floor 0.6, le disque de chaque bout (≈ 5 px de diamètre), décalé de (-6, 7), dépassait du
+/// bout du fil noir : un petit point blanc posé au-delà de l'extrémité du reflet.
 func drawAppIconHighlight(_ ctx: CGContext, wire: [CGPoint], random: inout AppIconRandom) {
-    let highlight = appIconBrushStroke(along: wire, width: 9, taper: 0.25, floor: 0.6, random: &random)
+    let highlight = appIconBrushStroke(along: wire, width: 9, taper: 0.25, floor: 0.5, random: &random)
     ctx.saveGState()
     ctx.translateBy(x: -6, y: 7)
     ctx.addPath(highlight)
